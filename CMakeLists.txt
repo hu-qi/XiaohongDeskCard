@@ -50,6 +50,18 @@ add_executable(test_lvgl_view tests/test_lvgl_view.c)
 target_link_libraries(test_lvgl_view PRIVATE desk_view_host)
 add_test(NAME desk_lvgl_view_host_tests COMMAND test_lvgl_view)
 
+# SDK-independent adapter for the upstream Xiaohong LvglTask + g_disp_event_qid.
+# Host fake NV/radio callback test only; not a WS63 SDK compiler build.
+add_library(desk_ws63_glue_host STATIC firmware/platform/ws63/desk_ws63_glue.c)
+target_include_directories(desk_ws63_glue_host PUBLIC firmware/platform/ws63)
+target_link_libraries(desk_ws63_glue_host PUBLIC desk_view_host)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(desk_ws63_glue_host PRIVATE -Wall -Wextra -Werror -Wpedantic)
+endif()
+add_executable(test_ws63_glue tests/test_ws63_glue.c)
+target_link_libraries(test_ws63_glue PRIVATE desk_ws63_glue_host)
+add_test(NAME desk_ws63_glue_host_tests COMMAND test_ws63_glue)
+
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME desk_sim_http_tests
