@@ -4,6 +4,7 @@
  */
 #include "desk_core.h"
 #include "desk_wire.h"
+#include "desk_packet.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -124,25 +125,53 @@ int desk_sim_apply_wire(const uint8_t *bytes, size_t size, int authorized)
  * connections. The very same bounded C receiver is used in firmware design.
  */
 int desk_sim_apply_fragmented(const uint8_t *bytes, size_t size,
-                              size_t fragment_size, int authorized)
+                              size_t max_write_bytes, int authorized)
 {
-    if (!g_initialized || bytes == NULL || fragment_size == 0u)
+    if (!g_initialized || bytes == NULL ||
+        size < DESK_WIRE_HEADER_SIZE || size > DESK_WIRE_MAX_FRAME ||
+        max_write_bytes < DESK_PACKET_BEGIN_SIZE) return DESK_BAD_INPUT;
+
+    desk_packet_session_t session = {0};
+    desk_set_command_t command = {0};
+    uint8_t begin[DESK_PACKET_BEGIN_SIZE] = {DESK_PACKET_BEGIN};
+    begin[1] = (uint8_t)size;
+    begin[2] = (uint8_t)(size >> 8u);
+    const uint32_t crc = desk_wire_crc32(bytes, size);
+    begin[3] = (uint8_t)crc;
+    begin[4] = (uint8_t)(crc >> 8u);
+    begin[5] = (uint8_t)(crc >> 16u);
+    begin[6] = (uint8_t)(crc >> 24u);
+    uint32_t now_ms = 1u;
+    const uint32_t inactivity_timeout_ms = 2000u;
+    if (desk_packet_feed(&session, begin, sizeof(begin),
+                         now_ms++, inactivity_timeout_ms,
+                         &command) != DESK_PACKET_PROGRESS)
         return DESK_BAD_INPUT;
-    desk_wire_rx_t rx = {0};
-    if (desk_wire_rx_begin(&rx, size, desk_wire_crc32(bytes, size)) != DESK_WIRE_OK)
-        return DESK_BAD_INPUT;
-    for (size_t offset = 0; offset < size;) {
-        size_t take = size - offset;
-        if (take > fragment_size) take = fragment_size;
-        if (desk_wire_rx_chunk(&rx, offset, bytes + offset, take) != DESK_WIRE_OK)
+
+    for (size_t offset = 0u; offset < size;) {
+        uint8_t packet[DESK_WIRE_MAX_FRAME + DESK_PACKET_CHUNK_HEADER];
+        const size_t capacity = max_write_bytes - DESK_PACKET_CHUNK_HEADER;
+        size_t amount = size - offset;
+        if (amount > capacity) amount = capacity;
+        packet[0] = DESK_PACKET_CHUNK;
+        packet[1] = (uint8_t)offset;
+        packet[2] = (uint8_t)(offset >> 8u);
+        memcpy(packet + DESK_PACKET_CHUNK_HEADER, bytes + offset, amount);
+        if (desk_packet_feed(&session, packet, DESK_PACKET_CHUNK_HEADER + amount,
+                             now_ms++, inactivity_timeout_ms,
+                             &command) != DESK_PACKET_PROGRESS)
             return DESK_BAD_INPUT;
-        offset += take;
+        offset += amount;
     }
-    const uint8_t *complete = NULL;
-    size_t total = 0;
-    if (desk_wire_rx_finish(&rx, &complete, &total) != DESK_WIRE_OK)
+
+    const uint8_t commit = DESK_PACKET_COMMIT;
+    if (desk_packet_feed(&session, &commit, 1u,
+                         now_ms++, inactivity_timeout_ms,
+                         &command) != DESK_PACKET_READY)
         return DESK_BAD_INPUT;
-    return desk_sim_apply_wire(complete, total, authorized);
+    /* The HTTP wrapper performs authorization before this path is invoked.
+     * Keep a second authorization gate in the actual Desk Core. */
+    return desk_core_apply(&g_core, &command, authorized != 0);
 }
 
 int desk_sim_snapshot(desk_content_t *content, desk_content_t *displayed,
