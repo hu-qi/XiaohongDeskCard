@@ -64,6 +64,9 @@ int main(void)
     assert(core.revision == 1u && f.saves == 1u);
     assert(desk_core_apply(&core, &cmd, true) == DESK_OK); /* idempotent retry */
     assert(f.saves == 1u);
+    cmd.expected_revision = 1u;
+    assert(desk_core_apply(&core, &cmd, true) == DESK_DUPLICATE_ID);
+    cmd.expected_revision = 0u;
     (void)strcpy(cmd.content.name, "Alice");
     assert(desk_core_apply(&core, &cmd, true) == DESK_DUPLICATE_ID);
     cmd = command(43, 0);
@@ -80,6 +83,10 @@ int main(void)
     assert(desk_core_apply(&core, &cmd, true) == DESK_RENDER_ERROR);
     assert(core.revision == 2u && f.stored_revision == 2u);
     f.fail_render = 0;
+    /* Repeat the original request: recover the display without a second flash write. */
+    const unsigned saved_before_retry = f.saves;
+    assert(desk_core_apply(&core, &cmd, true) == DESK_OK);
+    assert(f.saves == saved_before_retry);
     assert(desk_core_repaint(&core) == DESK_OK);
 
     desk_core_t restarted;
