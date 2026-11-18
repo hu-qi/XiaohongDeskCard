@@ -76,6 +76,11 @@ add_executable(test_ws63_glue tests/test_ws63_glue.c)
 target_link_libraries(test_ws63_glue PRIVATE desk_ws63_glue_host)
 add_test(NAME desk_ws63_glue_host_tests COMMAND test_ws63_glue)
 
+# Full host integration: Flash two-slot journal -> WS63 glue -> LVGL + business ACK.
+add_executable(test_nv_glue tests/test_nv_glue.c)
+target_link_libraries(test_nv_glue PRIVATE desk_ws63_glue_host)
+add_test(NAME desk_nv_glue_host_tests COMMAND test_nv_glue)
+
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME desk_sim_http_tests
