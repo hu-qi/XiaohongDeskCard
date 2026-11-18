@@ -1,0 +1,33 @@
+# Host simulator
+/build/
+/cmake-build-*/
+/__pycache__/
+*.py[cod]
+*.dylib
+*.so
+*.dll
+*.o
+*.a
+
+# DevEco / HarmonyOS
+**/oh_modules/
+**/.hvigor/
+**/build/
+**/.idea/
+**/.preview/
+**/.cxx/
+**/.gradle/
+*.hap
+*.app
+
+# IDE / local credentials / certificates
+.DS_Store
+*.p12
+*.p7b
+*.cer
+*.jks
+*.key
+*.pem
+.env
+.env.*
+!.env.example
