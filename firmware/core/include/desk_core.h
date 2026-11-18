@@ -47,6 +47,7 @@ typedef struct {
     uint32_t revision;
     uint32_t last_request_id;
     uint32_t last_request_revision;
+    uint32_t last_expected_revision;
     bool has_last_request;
     desk_hooks_t hooks;
 } desk_core_t;
