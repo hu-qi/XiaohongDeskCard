@@ -1,3 +1,6 @@
+import { common } from '@kit.AbilityKit';
+import { DeskDeviceDiscovery, DiscoveredDesk } from '../desk/DeskDeviceDiscovery';
+import { DeskPermissions } from '../desk/DeskPermissions';
 import { DeskAck, DeskChannel, DeskContent, DeskSetCommand, DeskState, DeskTransport } from '../desk/DeskModels';
 import { MockDeskTransport } from '../desk/MockDeskTransport';
 import { WifiHttpTransport } from '../desk/WifiHttpTransport';
@@ -23,12 +26,68 @@ struct Index {
   @State private status: string = '待发送（软件模拟器）';
   @State private nearLinkSupported: boolean = false;
   @State private busy: boolean = false;
+  @State private discoveryStatus: string = '尚未扫描真实无线设备';
+  @State private discoveredDevices: string = '';
+  private discovery: DeskDeviceDiscovery | null = null;
+  private scanTimer: number = -1;
   @State private endpoint: string = '';
   @State private token: string = '';
   private requestSequence: number = 0;
 
   aboutToAppear(): void {
     this.nearLinkSupported = isNearLinkAvailable();
+    this.discovery = new DeskDeviceDiscovery((item: DiscoveredDesk): void => {
+      this.discoveredDevices = item.channel.toUpperCase() + ': ' +
+        item.name + ' / ' + item.address + ' / RSSI ' + item.rssi.toString();
+    });
+  }
+
+  aboutToDisappear(): void {
+    if (this.scanTimer !== -1) {
+      clearTimeout(this.scanTimer);
+      this.scanTimer = -1;
+    }
+    const discovery: DeskDeviceDiscovery | null = this.discovery;
+    this.discovery = null;
+    if (discovery !== null) {
+      discovery.stopBle();
+      discovery.stopSle().catch((_error) => {});
+    }
+  }
+
+  private async discover(channel: DeskChannel): Promise<void> {
+    const discovery: DeskDeviceDiscovery | null = this.discovery;
+    if (discovery === null) return;
+    try {
+      const context: common.UIAbilityContext =
+        this.getUIContext().getHostContext() as common.UIAbilityContext;
+      if (!await DeskPermissions.request(context, channel)) {
+        this.discoveryStatus = '用户未授予 ' + channel.toUpperCase() + ' 权限';
+        return;
+      }
+      await discovery.stopSle();
+      discovery.stopBle();
+      this.discoveredDevices = '';
+      if (channel === DeskChannel.SLE) {
+        await discovery.startSle();
+      } else {
+        discovery.startBle();
+      }
+      this.discoveryStatus = '正在扫描 ' + channel.toUpperCase() +
+        '（仅发现设备，尚不能修改桌牌）';
+      if (this.scanTimer !== -1) clearTimeout(this.scanTimer);
+      this.scanTimer = setTimeout((): void => {
+        if (channel === DeskChannel.BLE) {
+          discovery.stopBle();
+        } else {
+          discovery.stopSle().catch((_error) => {});
+        }
+        this.discoveryStatus = channel.toUpperCase() + ' 扫描已结束';
+        this.scanTimer = -1;
+      }, 7000);
+    } catch (error) {
+      this.discoveryStatus = channel.toUpperCase() + ' 扫描失败：' + String(error);
+    }
   }
 
   private content(): DeskContent {
@@ -158,6 +217,18 @@ struct Index {
               .onClick(() => { this.mock(DeskChannel.SLE); })
           }.width('100%')
           Text('BLE/SLE 按钮只模拟协议层，未连接手机无线模块')
+            .fontSize(11).fontColor('#9b6726')
+          Row({ space: 8 }) {
+            Button('扫描 BLE 设备').layoutWeight(1)
+              .backgroundColor('#427a8b')
+              .onClick(() => { this.discover(DeskChannel.BLE); })
+            Button('扫描星闪设备').layoutWeight(1).enabled(this.nearLinkSupported)
+              .backgroundColor('#427a8b')
+              .onClick(() => { this.discover(DeskChannel.SLE); })
+          }.width('100%')
+          Text(this.discoveryStatus).fontSize(12).fontColor('#426483')
+          Text(this.discoveredDevices).fontSize(11).fontColor('#647386')
+          Text('扫描功能调用真实无线 API，需要用户授权；没有 WS63 桌牌广播时不会发现目标')
             .fontSize(11).fontColor('#9b6726')
           TextInput({ text: this.endpoint, placeholder: 'HTTP 地址，如 http://192.168.x.x:8765' })
             .onChange((value: string) => { this.endpoint = value; })
