@@ -1,0 +1,162 @@
+/*
+ * Desktop-only bridge for XiaohongDeskCard's REAL C99 Desk Core.
+ * No WS63, LVGL or radio SDK is involved.
+ */
+#include "desk_core.h"
+#include "desk_wire.h"
+
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+#define SNAPSHOT_MAGIC UINT32_C(0x58484443)
+#define SNAPSHOT_PATH_CAP 512u
+
+typedef struct {
+    uint32_t magic;
+    uint32_t revision;
+    desk_content_t content;
+    uint32_t crc;
+} snapshot_t;
+
+static desk_core_t g_core;
+static desk_content_t g_displayed;
+static char g_storage_path[SNAPSHOT_PATH_CAP];
+static int g_initialized;
+
+static int load_snapshot(void *user, desk_content_t *out, uint32_t *revision)
+{
+    (void)user;
+    if (g_storage_path[0] == '\0') return 0;
+    FILE *file = fopen(g_storage_path, "rb");
+    if (file == NULL) return 0;
+    snapshot_t snapshot = {0};
+    const size_t read_count = fread(&snapshot, 1, sizeof(snapshot), file);
+    const int extra = fgetc(file);
+    const int close_result = fclose(file);
+    if (read_count != sizeof(snapshot) || extra != EOF || close_result != 0 ||
+        snapshot.magic != SNAPSHOT_MAGIC) return 0;
+    const uint32_t crc = desk_wire_crc32((const uint8_t *)&snapshot,
+                                         offsetof(snapshot_t, crc));
+    if (crc != snapshot.crc || !desk_content_valid(&snapshot.content)) return 0;
+    *out = snapshot.content;
+    *revision = snapshot.revision;
+    return 1;
+}
+
+static int save_snapshot(void *user, const desk_content_t *content, uint32_t revision)
+{
+    (void)user;
+    if (g_storage_path[0] == '\0') return 0;
+    char temporary[SNAPSHOT_PATH_CAP + 8u];
+    const int n = snprintf(temporary, sizeof(temporary), "%s.tmp", g_storage_path);
+    if (n <= 0 || (size_t)n >= sizeof(temporary)) return 0;
+    snapshot_t snapshot = {0};
+    snapshot.magic = SNAPSHOT_MAGIC;
+    snapshot.revision = revision;
+    snapshot.content = *content;
+    snapshot.crc = desk_wire_crc32((const uint8_t *)&snapshot,
+                                   offsetof(snapshot_t, crc));
+    FILE *file = fopen(temporary, "wb");
+    if (file == NULL) return 0;
+    int ok = fwrite(&snapshot, 1, sizeof(snapshot), file) == sizeof(snapshot);
+    if (fflush(file) != 0) ok = 0;
+    if (fclose(file) != 0) ok = 0;
+    if (!ok || rename(temporary, g_storage_path) != 0) {
+        (void)remove(temporary);
+        return 0;
+    }
+    return 1;
+}
+
+static int render_screen(void *user, const desk_content_t *content)
+{
+    (void)user;
+    g_displayed = *content;
+    return 1;
+}
+
+int desk_sim_init(const char *path)
+{
+    if (path == NULL) return 0;
+    const size_t n = strlen(path);
+    if (n == 0 || n >= sizeof(g_storage_path)) return 0;
+    memcpy(g_storage_path, path, n + 1u);
+    memset(&g_displayed, 0, sizeof(g_displayed));
+    desk_hooks_t hooks = {load_snapshot, save_snapshot, render_screen, NULL};
+    desk_core_init(&g_core, hooks);
+    g_initialized = 1;
+    return desk_core_repaint(&g_core) == DESK_OK;
+}
+
+int desk_sim_apply_set(uint32_t request_id, uint32_t expected_revision,
+                       const char *name, const char *title,
+                       const char *organization, const char *theme, int authorized)
+{
+    if (!g_initialized || name == NULL || title == NULL ||
+        organization == NULL || theme == NULL) return DESK_BAD_INPUT;
+    desk_set_command_t cmd = {0};
+    cmd.request_id = request_id;
+    cmd.expected_revision = expected_revision;
+    const char *sources[] = {name, title, organization, theme};
+    char *targets[] = {cmd.content.name, cmd.content.title,
+                       cmd.content.organization, cmd.content.theme};
+    const size_t capacities[] = {DESK_NAME_CAP, DESK_TITLE_CAP,
+                                 DESK_ORG_CAP, DESK_THEME_CAP};
+    for (size_t i = 0; i < 4u; ++i) {
+        const size_t n = strlen(sources[i]);
+        if (n >= capacities[i]) return DESK_BAD_INPUT;
+        memcpy(targets[i], sources[i], n + 1u);
+    }
+    return desk_core_apply(&g_core, &cmd, authorized != 0);
+}
+
+int desk_sim_apply_wire(const uint8_t *bytes, size_t size, int authorized)
+{
+    if (!g_initialized) return DESK_BAD_INPUT;
+    desk_set_command_t cmd = {0};
+    if (desk_wire_decode_set(bytes, size, &cmd) != DESK_WIRE_OK) return DESK_BAD_INPUT;
+    return desk_core_apply(&g_core, &cmd, authorized != 0);
+}
+
+/*
+ * Simulates transport chunking; deliberately does NOT create Bluetooth or SLE
+ * connections. The very same bounded C receiver is used in firmware design.
+ */
+int desk_sim_apply_fragmented(const uint8_t *bytes, size_t size,
+                              size_t fragment_size, int authorized)
+{
+    if (!g_initialized || bytes == NULL || fragment_size == 0u)
+        return DESK_BAD_INPUT;
+    desk_wire_rx_t rx = {0};
+    if (desk_wire_rx_begin(&rx, size, desk_wire_crc32(bytes, size)) != DESK_WIRE_OK)
+        return DESK_BAD_INPUT;
+    for (size_t offset = 0; offset < size;) {
+        size_t take = size - offset;
+        if (take > fragment_size) take = fragment_size;
+        if (desk_wire_rx_chunk(&rx, offset, bytes + offset, take) != DESK_WIRE_OK)
+            return DESK_BAD_INPUT;
+        offset += take;
+    }
+    const uint8_t *complete = NULL;
+    size_t total = 0;
+    if (desk_wire_rx_finish(&rx, &complete, &total) != DESK_WIRE_OK)
+        return DESK_BAD_INPUT;
+    return desk_sim_apply_wire(complete, total, authorized);
+}
+
+int desk_sim_snapshot(desk_content_t *content, desk_content_t *displayed,
+                      uint32_t *revision)
+{
+    if (!g_initialized || content == NULL || displayed == NULL || revision == NULL)
+        return 0;
+    *content = g_core.content;
+    *displayed = g_displayed;
+    *revision = g_core.revision;
+    return 1;
+}
+
+const char *desk_sim_result_name(int code)
+{
+    return desk_result_name((desk_result_t)code);
+}
