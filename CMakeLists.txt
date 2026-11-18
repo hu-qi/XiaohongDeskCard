@@ -39,6 +39,10 @@ add_executable(test_radio_ingress tests/test_radio_ingress.c)
 target_link_libraries(test_radio_ingress PRIVATE desk_core)
 add_test(NAME desk_radio_ingress_tests COMMAND test_radio_ingress)
 
+add_executable(test_packet_fuzz tests/test_packet_fuzz.c)
+target_link_libraries(test_packet_fuzz PRIVATE desk_core)
+add_test(NAME desk_packet_fuzz_tests COMMAND test_packet_fuzz)
+
 # LVGL 8 API surface is compiled against a deliberately small HOST stub.
 # This tests view logic/ownership but NOT the upstream LVGL or actual ST7789.
 add_library(desk_view_host STATIC
