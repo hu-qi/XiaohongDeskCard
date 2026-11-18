@@ -1,9 +1,9 @@
 name: Desk Software Baseline (host)
 on:
   push:
-    paths: ["firmware/core/**", "tools/simulator/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+    paths: ["firmware/core/**", "firmware/display/**", "firmware/platform/ws63/**", "tools/simulator/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
   pull_request:
-    paths: ["firmware/core/**", "tools/simulator/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+    paths: ["firmware/core/**", "firmware/display/**", "firmware/platform/ws63/**", "tools/simulator/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -30,3 +30,22 @@ jobs:
         run: |
           cmake --build build-ubsan --parallel
           ctest --test-dir build-ubsan --output-on-failure -R desk_ -E desk_sim_http_tests
+
+  lvgl-v8-api:
+    name: Real LVGL 8.3.11 host compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned actual LVGL 8.3.11 source
+        uses: actions/checkout@v4
+        with:
+          repository: lvgl/lvgl
+          ref: 74d0a816a440eea53e030c4f1af842a94f7ce3d3
+          path: external/lvgl
+          persist-credentials: false
+      - name: Configure against actual LVGL library
+        run: cmake -S tests/lvgl_real -B build-real-lvgl -DDESK_LVGL_SOURCE_DIR="${GITHUB_WORKSPACE}/external/lvgl" -DCMAKE_BUILD_TYPE=Debug
+      - name: Compile actual LVGL and Desk 240x240 View
+        run: cmake --build build-real-lvgl --target test_lvgl_real --parallel 4
+      - name: Execute real LVGL headless integration test
+        run: ctest --test-dir build-real-lvgl --output-on-failure
