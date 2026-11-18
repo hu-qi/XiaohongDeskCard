@@ -3,7 +3,7 @@ project(XiaohongDeskCardRealLVGLTest LANGUAGES C)
 
 if(NOT DEFINED DESK_LVGL_SOURCE_DIR OR NOT EXISTS "${DESK_LVGL_SOURCE_DIR}/lvgl.h")
     message(FATAL_ERROR
-      "Provide -DDESK_LVGL_SOURCE_DIR=/path/to/lvgl-v8.3.11 source")
+      "Provide -DDESK_LVGL_SOURCE_DIR=/path/to/lvgl-v8-or-v9 source")
 endif()
 
 # Actual LVGL source is built as a proper static C library; C compiler and
