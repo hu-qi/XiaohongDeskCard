@@ -5,7 +5,7 @@
 #include "lvgl.h"
 
 /*
- * LVGL v8 UI adapter for Xiaohong AI's original 240x240 ST7789 TFT.
+ * LVGL v8/v9 UI adapter for Xiaohong AI's original 240x240 ST7789 TFT.
  * MUST only be called from LvglTask after LVGL/display initialization.
  * This module does not initialize SPI, LVGL, the screen driver or RTOS.
  */
