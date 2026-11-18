@@ -44,3 +44,50 @@ P0-A：原装屏静态桌牌 → P0-B：统一命令与配置保存 → P0-C：B
 ## 许可证
 
 待确认并在导入第三方 SDK/上游代码前审查其许可证。当前仓库不声明继承任何上游源码授权。
+
+## 电脑端先行验证（无需小鸿实机）
+
+本项目现已提供**真实 C99 Desk Core + 桌面 Web 模拟器**。桌面模拟器不是 WS63 固件，也不是物理 BLE / 星闪模拟器；它在电脑本机用不同的传输分片策略验证相同的桌牌协议。
+
+macOS / Linux（预装 CMake、C 编译器、Python 3）：
+
+```bash
+git clone https://github.com/hu-qi/XiaohongDeskCard.git
+cd XiaohongDeskCard
+git switch feat/desk-core-triradio-baseline
+
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+
+python3 tools/simulator/desk_sim_server.py
+# 浏览器打开 http://127.0.0.1:8765
+```
+
+模拟界面可以直接输入姓名、职位、组织，选择 Wi-Fi HTTP、BLE MOCK、SLE MOCK，并预览 240×240 屏幕。配置保存在 `build/desk-sim-state.bin`，重启模拟器可恢复。
+
+开发接口示例（仅限**本机 127.0.0.1**）：
+
+```bash
+curl -X PUT http://127.0.0.1:8765/api/v1/desk/content \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer dev-only-token' \
+  -d '{"requestId":123,"expectedRevision":0,"content":{"name":"张三","title":"开发者","organization":"OpenHarmony 社区","theme":"classic"}}'
+```
+
+注意：如已在模拟器中修改过内容，`expectedRevision` 应从 `GET /api/v1/desk/status` 的响应读取；同一 `requestId` 重试具有有限的幂等语义。
+
+开发令牌仅用于本机 Mock 环境，可以通过 `DESK_SIM_TOKEN` 覆盖；**不要将它部署在公网或作为真实 WS63 设备的安全实现**。
+
+### 模拟与硬件的边界
+
+| 项目 | 当前 |
+|---|---|
+| Desk Core 与协议 C99 单测 | 已实现；GitHub Actions 编译测试 |
+| 本机 HTTP 控制 / 240×240 Web 预览 | 已实现 |
+| BLE/SLE 分片与完整帧交付到 Desk Core | 已实现模拟路径 |
+| 真正的 BLE GATT / SLE SSAP 无线通讯 | 尚未实现 |
+| LVGL / ST7789 实机绘制、WS63 SDK 构建 | 尚未实现 |
+| HarmonyOS ArkTS 原生 App | 待开发 |
+
+**硬件实测放最后，但 SDK 编译检查应提前。** 详细说明见 [验证矩阵](docs/VALIDATION.md) 与 [桌面协议](docs/WIRE_V1.md)。
