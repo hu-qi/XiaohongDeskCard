@@ -1,3 +1,4 @@
+import { DeskRouter, DeskRouterCandidate, DeskRouterResult } from '../desk/DeskRouter';
 import { common } from '@kit.AbilityKit';
 import { DeskDeviceDiscovery, DiscoveredDesk } from '../desk/DeskDeviceDiscovery';
 import { DeskPermissions } from '../desk/DeskPermissions';
@@ -141,6 +142,46 @@ struct Index {
     this.applyTransport(transport);
   }
 
+  /**
+   * Automatically chooses among MOCK adapters. This demonstrates fallback
+   * selection only; it does NOT turn on any real BLE/SLE radio.
+   */
+  private async autoMock(): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.status = '模拟三模自动选择中…';
+    try {
+      const channels: Array<DeskChannel> = [
+        DeskChannel.SLE, DeskChannel.BLE, DeskChannel.WIFI
+      ];
+      const candidates: Array<DeskRouterCandidate> = channels.map(
+        (channel: DeskChannel): DeskRouterCandidate => ({
+          channel: channel,
+          open: async () => {
+            if (channel === DeskChannel.SLE && !this.nearLinkSupported) {
+              throw new Error('SLE not supported; falling back before write');
+            }
+            return new MockDeskTransport(channel);
+          }
+        })
+      );
+      const router: DeskRouter = new DeskRouter(candidates);
+      const outcome: DeskRouterResult = await router.update(
+        this.content(), this.nextId());
+      this.deviceName = outcome.ack.state.display.name;
+      this.deviceTitle = outcome.ack.state.display.title;
+      this.deviceOrg = outcome.ack.state.display.organization;
+      this.revision = outcome.ack.state.revision;
+      this.status = '软件模拟自动选择 ' + outcome.channel.toUpperCase() +
+        '；跳过：' + outcome.skipped.join(',') +
+        '；ACK：' + outcome.ack.result;
+    } catch (err) {
+      this.status = '自动选择失败：' + String(err);
+    } finally {
+      this.busy = false;
+    }
+  }
+
   private wifi(): void {
     if (!this.endpoint.startsWith('http://') &&
         !this.endpoint.startsWith('https://')) {
@@ -216,6 +257,9 @@ struct Index {
             Button('SLE Mock').layoutWeight(1).enabled(!this.busy)
               .onClick(() => { this.mock(DeskChannel.SLE); })
           }.width('100%')
+          Button('自动选择链路 · Mock').width('100%').enabled(!this.busy)
+            .backgroundColor('#4b6088')
+            .onClick(() => { this.autoMock(); })
           Text('BLE/SLE 按钮只模拟协议层，未连接手机无线模块')
             .fontSize(11).fontColor('#9b6726')
           Row({ space: 8 }) {
