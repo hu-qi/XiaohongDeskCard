@@ -1,32 +1,22 @@
-# HarmonyOS 客户端：ArkTS 集成状态
+# XiaohongDeskCard · HarmonyOS Stage App
 
-当前包含 **可供接入 DevEco Stage 工程的源文件**，但尚未创建完整 HAP 工程，未进行 ArkTS 编译或手机实测。
+这个目录现在包含 Stage 工程骨架、入口 Ability、ArkUI 桌牌页面，以及三模传输的适配代码基线。
 
-```text
-src/main/ets/desk/
-  DeskModels.ets          # 桌牌数据结构、Wi-Fi/BLE/SLE 传输契约
-  WifiHttpTransport.ets   # NetworkKit HTTP 适配
-  NearLinkCapability.ets  # API 26+ 星闪能力检测
-```
+> 重要：本仓库当前的 GitHub Actions 只运行 C99、HTTP 模拟器和 Stage **结构检查**；尚未执行 DevEco / ArkTS 编译，尚未生成 HAP，也没有在 HarmonyOS 模拟器或手机上安装运行。
 
-## 当前范围
+## 快速入口
 
-- `WifiHttpTransport` 为基于官方 `@kit.NetworkKit` HttpRequest API 的源码初稿，可调用模拟器 `GET /api/v1/desk/status` 和 `PUT /api/v1/desk/content`。需要在 DevEco 工程中声明网络权限并进行 HAP 编译。
-- `NearLinkCapability` 基于 `@kit.ConnectivityKit`，其中 `manager.isNearLinkSupported()` 从 API 26.0.0 开始提供。**仅当 DevEco SDK 和目标终端支持时才能编译/调用**，不同系统版本需要单独做依赖隔离/编译配置。
-- BLE GATT 与 SLE SSAP 目前尚未实现真实手机传输。桌面模拟器的 BLE/SLE 只是二进制分包/重组模拟，切勿称之为真机 BLE/SLE 已联通。
-- 由于桌面模拟器只绑定 `127.0.0.1`，实体手机无法直接访问 Mac 上的该地址；后续对接时应使用受保护的局域网测试代理或显式开发模式，不建议默认暴露 Mock 服务。
+- [ArkTS 与 Stage 集成指南](../../docs/HARMONY_APP.md)
+- [桌牌 App 主页](entry/src/main/ets/pages/Index.ets)
+- [BLE GATT 真实 SDK 写入原型](entry/src/main/ets/desk/BleGattLink.ets)
+- [SLE SSAP 真实 SDK 写入原型](entry/src/main/ets/desk/SleSsapLink.ets)
+- [Wi-Fi HTTP 客户端](entry/src/main/ets/desk/WifiHttpTransport.ets)
+- [统一 C 帧对应的 ArkTS 编码](entry/src/main/ets/desk/DeskWireFrame.ets)
 
-## 下一步
+## 在 DevEco 打开
 
-1. 创建正式 DevEco Stage 应用工程（AppScope、entry、build-profile、模块配置与 ArkUI 编辑页）。
-2. 完成 BLE GATT 服务发现、分包、特征写入及通知 ACK。
-3. 完成 SLE 扫描、SSAP 服务发现、分包写入和通知 ACK，并使用 NearLink 能力查询做功能降级。
-4. 接入桌面模拟器自动化测试及 DevEco 编译检查。
-5. 最后一轮才用小鸿 AI 实机测试三模通信与 LVGL 原屏。
+使用 DevEco Studio 打开本目录 `apps/harmony`（不要打开仓库顶层作为 HarmonyOS 工程）。当前 SDK 基线配置为 `6.0.2(22)`，沿用本仓库主人已有的 HarmonyOS 工程风格；最终构建可用性需要本地 DevEco 检查。
 
-## 参考官方文档
+页面上的 **BLE Mock / SLE Mock** 是明确标注的纯 ArkTS 模拟按钮；真正的 GATT / SSAP 客户端还需要服务 UUID、设备端广播和配对授权等条件，尚未接入 UI。
 
-- https://developer.huawei.com/consumer/cn/doc/harmonyos-references/js-apis-http/
-- https://developer.huawei.com/consumer/cn/doc/harmonyos-references/js-apis-bluetooth-ble/
-- https://developer.huawei.com/consumer/cn/doc/harmonyos-references/js-apis-nearlink-ssap/
-- https://developer.huawei.com/consumer/cn/doc/harmonyos-references/js-apis-nearlink-manager/
+特别注意：首版用 `@kit.NearLinkKit`，它的相关接口自 API 13 起即有提供，**不要求为第一版直接切换到 API 26**。请参阅 [官方 V13 SSAP](https://developer.huawei.com/consumer/cn/doc/harmonyos-references-V13/nearlink-ssap-V13/)。
