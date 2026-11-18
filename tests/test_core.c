@@ -111,9 +111,31 @@ int main(void)
     assert(desk_core_apply(&restarted, &decoded, true) == DESK_OK);
     assert(restarted.revision == 3u);
 
+    /* Business ACK is separate from radio write completion. */
+    desk_ack_t ack = {77u, restarted.revision, DESK_OK};
+    uint8_t ack_frame[DESK_ACK_SIZE] = {0};
+    desk_ack_t ack_out = {0};
+    assert(desk_wire_encode_ack(&ack, ack_frame, sizeof(ack_frame)) == DESK_WIRE_OK);
+    assert(ack_frame[0] == DESK_ACK_MAGIC && ack_frame[1] == DESK_WIRE_VERSION);
+    assert(desk_wire_decode_ack(ack_frame, sizeof(ack_frame), &ack_out) == DESK_WIRE_OK);
+    assert(ack_out.request_id == 77u && ack_out.revision == 3u &&
+           ack_out.result == DESK_OK);
+    assert(desk_wire_decode_ack(ack_frame, DESK_ACK_SIZE - 1u, &ack_out) ==
+           DESK_WIRE_SIZE);
+    ack_frame[11] ^= 0x01u;
+    assert(desk_wire_decode_ack(ack_frame, sizeof(ack_frame), &ack_out) == DESK_WIRE_CRC);
+    ack_frame[11] ^= 0x01u;
+    ack_frame[2] = 0xFFu;
+    assert(desk_wire_decode_ack(ack_frame, sizeof(ack_frame), &ack_out) ==
+           DESK_WIRE_INVALID);
+    ack_frame[2] = DESK_OK;
+    ack.request_id = 0u;
+    assert(desk_wire_encode_ack(&ack, ack_frame, sizeof(ack_frame)) ==
+           DESK_WIRE_INVALID);
+
     bytes[18] ^= 0x40;
     assert(desk_wire_decode_set(bytes, length, &decoded) == DESK_WIRE_CRC);
     assert(desk_wire_decode_set(bytes, length - 1, &decoded) == DESK_WIRE_SIZE);
-    printf("PASS: core/persist/UTF8/authorization/idempotency/revision/wire/fragment/CRC\n");
+    printf("PASS: core/persist/UTF8/authorization/idempotency/revision/wire/fragment/ACK/CRC\n");
     return 0;
 }
