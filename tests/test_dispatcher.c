@@ -11,6 +11,7 @@ typedef struct {
     unsigned renders;
     unsigned saves;
     bool is_locked;
+    uint32_t revoked_peer;
     desk_channel_t channels[16];
     uint32_t peers[16];
     desk_ack_t acks[16];
@@ -70,6 +71,13 @@ static int render(void *raw, const desk_content_t *content)
     return 1;
 }
 
+static bool check_authorized(void *raw, desk_channel_t channel, uint32_t peer)
+{
+    fake_context_t *fake = (fake_context_t *)raw;
+    (void)channel;
+    return peer != fake->revoked_peer;
+}
+
 static desk_dispatch_item_t make_item(desk_channel_t channel, uint32_t peer,
                                       uint32_t request, uint32_t expected,
                                       bool authorized)
@@ -93,7 +101,8 @@ int main(void)
     desk_core_t core;
     desk_hooks_t core_hooks = {NULL, save, render, &fake};
     desk_core_init(&core, core_hooks);
-    desk_dispatch_hooks_t hooks = {lock, unlock, notify_ui, on_result, &fake};
+    desk_dispatch_hooks_t hooks = {lock, unlock, notify_ui, on_result, &fake,
+                                   check_authorized};
     desk_dispatcher_t dispatcher;
     assert(desk_dispatcher_init(&dispatcher, &core, hooks));
     assert(!desk_dispatcher_process_one(&dispatcher));
@@ -153,9 +162,19 @@ int main(void)
     invalid = make_item(DESK_CHANNEL_SLE, 0u, 42u, 7u, true);
     assert(desk_dispatcher_submit(&dispatcher, &invalid) == DESK_DISPATCH_INVALID);
 
+    /* Auth must be revalidated after queueing, at actual UI execution. */
+    desk_dispatch_item_t revoked =
+        make_item(DESK_CHANNEL_SLE, 777u, 20u, 7u, true);
+    assert(desk_dispatcher_submit(&dispatcher, &revoked) == DESK_DISPATCH_QUEUED);
+    fake.revoked_peer = 777u;
+    assert(desk_dispatcher_process_one(&dispatcher));
+    assert(fake.acks[9].request_id == 20u &&
+           fake.acks[9].result == DESK_UNAUTHORIZED);
+    assert(core.revision == 7u && fake.renders == 7u);
+
     assert(fake.locks == fake.unlocks && !fake.is_locked);
-    assert(fake.wakes == 9u);
-    assert(fake.callbacks == 9u);
+    assert(fake.wakes == 10u);
+    assert(fake.callbacks == 10u);
     puts("PASS: UI-thread serialization, FIFO, 3 transports, ACK, authorization, overflow");
     return 0;
 }
