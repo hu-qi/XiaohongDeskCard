@@ -1,0 +1,17 @@
+name: Desk Core (host)
+on:
+  push:
+    paths: ["firmware/core/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+  pull_request:
+    paths: ["firmware/core/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Compile
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
