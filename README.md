@@ -88,6 +88,21 @@ curl -X PUT http://127.0.0.1:8765/api/v1/desk/content \
 | BLE/SLE 分片与完整帧交付到 Desk Core | 已实现模拟路径 |
 | 真正的 BLE GATT / SLE SSAP 无线通讯 | 尚未实现 |
 | LVGL / ST7789 实机绘制、WS63 SDK 构建 | 尚未实现 |
-| HarmonyOS ArkTS 原生 App | 待开发 |
+| HarmonyOS Stage App 工程及 ArkUI 编辑页 | 已提交源码；未在 DevEco 编译 |
+| BLE GATT / SLE SSAP 原生客户端 | SDK 适配原型已提交；未接入实际 WS63 服务 |
 
 **硬件实测放最后，但 SDK 编译检查应提前。** 详细说明见 [验证矩阵](docs/VALIDATION.md) 与 [桌面协议](docs/WIRE_V1.md)。
+
+## HarmonyOS 原生 App（源码基线）
+
+已在 [apps/harmony](apps/harmony) 中创建 Stage 模型工程结构、EntryAbility、ArkUI 桌牌编辑界面：
+
+- BLE Mock / SLE Mock 按钮用于 ArkTS 业务预览；
+- Wi-Fi HTTP 按钮使用 NetworkKit 对明确指定的测试设备发送真实 HTTP 请求；
+- `BleGattLink.ets` 和 `SleSsapLink.ets` 是基于官方 SDK 的无线客户端适配原型，尚无 WS63 服务 UUID / 业务 ACK，未在 DevEco 编译；
+- `DeskWireFrame.ets` 提供与 C99 Desk Core 匹配的帧布局及应用层 BEGIN/CHUNK/COMMIT 分包设计；
+- 工程配置对齐 HarmonyOS `6.0.2(22)`，使用从 API 13 起可用的 `@kit.NearLinkKit`；后续可迁移到新版 `@kit.ConnectivityKit`。
+
+详见 [HarmonyOS 集成与边界说明](docs/HARMONY_APP.md)。
+
+**当前 GitHub CI 检查的是宿主机 C99/HTTP 逻辑与 Stage 文件结构，并非 HAP 编译成功，也不代表 BLE/SLE 物理链路已联通。**
