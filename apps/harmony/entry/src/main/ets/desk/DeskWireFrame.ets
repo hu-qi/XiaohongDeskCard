@@ -28,7 +28,9 @@ export class DeskWireFrame {
     const values: Array<Uint8Array> = [];
     let payloadSize: number = 4;
     for (let i: number = 0; i < fields.length; i++) {
-      const value: Uint8Array = encoder.encodeInto(fields[i]);
+      // Some SDK versions return undefined for encodeInto('').
+      const value: Uint8Array = fields[i].length === 0 ?
+        new Uint8Array(0) : encoder.encodeInto(fields[i]);
       if (value.length >= capacities[i]) {
         throw new Error('UTF-8 field exceeds byte limit: ' + i.toString());
       }
