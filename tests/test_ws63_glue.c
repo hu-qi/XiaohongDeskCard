@@ -10,6 +10,7 @@ typedef struct {
     unsigned saves;
     unsigned acks;
     bool locked;
+    bool currently_authorized;
     desk_content_t content;
     uint32_t revision;
     desk_ack_t last_ack;
@@ -61,16 +62,26 @@ static void unlock(void *ctx)
     p->unlocks++;
 }
 
+static bool authorize_on_ui(void *ctx, desk_channel_t channel, uint32_t peer)
+{
+    fake_platform_t *p = (fake_platform_t *)ctx;
+    return p->currently_authorized && channel == DESK_CHANNEL_BLE && peer == 55u;
+}
+
 int main(void)
 {
     desk_ws63_port_t port = {0};
     fake_platform_t platform = {0};
+    platform.currently_authorized = true;
     desk_dispatch_item_t item = {0};
     assert(desk_ws63_port_submit(&port, &item) == DESK_DISPATCH_INVALID);
     assert(desk_ws63_port_ui_drain(&port) == 0u);
 
     desk_ws63_callbacks_t callbacks = {load_nv, save_nv, notify, ack, lock, unlock,
-                                       &platform};
+                                       &platform, authorize_on_ui};
+    desk_ws63_callbacks_t missing_recheck = callbacks;
+    missing_recheck.authorize_on_ui = NULL;
+    assert(!desk_ws63_port_init(&port, missing_recheck, NULL));
     assert(desk_ws63_port_init(&port, callbacks, NULL));
     assert(lvgl_stub_objects_alive() == 6u);
     assert(strcmp(port.view.name_label->text, "Xiaohong") == 0);
@@ -96,6 +107,18 @@ int main(void)
     assert(strcmp(port.view.name_label->text, "胡琦") == 0);
     assert(port.view.header->bg == 0x173A60u);
     assert(platform.locks == platform.unlocks && !platform.locked);
+
+    /* A command accepted by BLE before owner revocation must be rejected by
+     * the UI task immediately before applying NV/display changes. */
+    item.command.request_id = 2u;
+    item.command.expected_revision = 1u;
+    assert(desk_ws63_port_submit(&port, &item) == DESK_DISPATCH_QUEUED);
+    platform.currently_authorized = false;
+    assert(desk_ws63_port_ui_drain(&port) == 1u);
+    assert(platform.last_ack.request_id == 2u);
+    assert(platform.last_ack.result == DESK_UNAUTHORIZED);
+    assert(platform.saves == 1u && port.core.revision == 1u);
+    platform.currently_authorized = true;
 
     desk_ws63_port_destroy(&port);
     assert(lvgl_stub_objects_alive() == 0u);
