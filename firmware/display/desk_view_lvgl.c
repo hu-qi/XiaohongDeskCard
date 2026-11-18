@@ -23,7 +23,11 @@ int desk_lvgl_view_create(desk_lvgl_view_t *view, lv_obj_t *parent)
 {
     if (view == NULL) return 0;
     memset(view, 0, sizeof(*view));
+#if LVGL_VERSION_MAJOR >= 9
+    if (parent == NULL) parent = lv_screen_active();
+#else
     if (parent == NULL) parent = lv_scr_act();
+#endif
     if (parent == NULL) return 0;
 
     view->root = lv_obj_create(parent);
@@ -92,6 +96,12 @@ int desk_lvgl_view_render(void *user, const desk_content_t *content)
 void desk_lvgl_view_destroy(desk_lvgl_view_t *view)
 {
     if (view == NULL) return;
-    if (view->root != NULL) lv_obj_del(view->root);
+    if (view->root != NULL) {
+#if LVGL_VERSION_MAJOR >= 9
+        lv_obj_delete(view->root);
+#else
+        lv_obj_del(view->root);
+#endif
+    }
     memset(view, 0, sizeof(*view));
 }
