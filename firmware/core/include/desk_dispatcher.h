@@ -50,6 +50,13 @@ typedef struct {
     void (*on_result)(void *context, desk_channel_t channel,
                       uint32_t peer_token, const uint8_t ack[DESK_ACK_SIZE]);
     void *context;
+    /*
+     * Revalidate current connection generation + device ownership when the
+     * UI task ACTUALLY processes the command, not only at radio ingress.
+     * Mandatory for production devices; optional for legacy host tests.
+     */
+    bool (*authorize_on_ui)(void *context, desk_channel_t channel,
+                            uint32_t peer_token);
 } desk_dispatch_hooks_t;
 
 typedef struct {
