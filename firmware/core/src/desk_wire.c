@@ -155,3 +155,38 @@ desk_wire_result_t desk_wire_rx_finish(desk_wire_rx_t *rx,
     rx->active = false;
     return DESK_WIRE_OK;
 }
+
+/* Business-level ACK; never infer APPLIED solely from BLE/SSAP write success. */
+desk_wire_result_t desk_wire_encode_ack(const desk_ack_t *ack, uint8_t *out, size_t capacity)
+{
+    if (ack == NULL || out == NULL || ack->request_id == 0u ||
+        ack->result < DESK_OK || ack->result > DESK_REVISION_EXHAUSTED)
+        return DESK_WIRE_INVALID;
+    if (capacity < DESK_ACK_SIZE) return DESK_WIRE_SIZE;
+    out[0] = DESK_ACK_MAGIC;
+    out[1] = DESK_WIRE_VERSION;
+    out[2] = (uint8_t)ack->result;
+    out[3] = 0u;
+    write32(out + 4, ack->request_id);
+    write32(out + 8, ack->revision);
+    write32(out + 12, desk_wire_crc32(out, 12u));
+    return DESK_WIRE_OK;
+}
+
+desk_wire_result_t desk_wire_decode_ack(const uint8_t *frame, size_t size, desk_ack_t *out)
+{
+    if (frame == NULL || out == NULL || size != DESK_ACK_SIZE)
+        return DESK_WIRE_SIZE;
+    if (frame[0] != DESK_ACK_MAGIC || frame[1] != DESK_WIRE_VERSION ||
+        frame[3] != 0u || frame[2] > (uint8_t)DESK_REVISION_EXHAUSTED ||
+        read32(frame + 4) == 0u)
+        return DESK_WIRE_INVALID;
+    if (read32(frame + 12) != desk_wire_crc32(frame, 12u))
+        return DESK_WIRE_CRC;
+    desk_ack_t decoded;
+    decoded.request_id = read32(frame + 4);
+    decoded.revision = read32(frame + 8);
+    decoded.result = (desk_result_t)frame[2];
+    *out = decoded;
+    return DESK_WIRE_OK;
+}
