@@ -41,6 +41,7 @@ apps/harmony/
         DeskServiceIds.ets
         DeskDeviceDiscovery.ets
         DeskPermissions.ets
+        DeskRouter.ts
         BleGattLink.ets
         SleSsapLink.ets
       resources/base/profile/main_pages.json
@@ -79,7 +80,7 @@ apps/harmony/
 
 - DevEco 真正构建验证与图标等资源兼容修复。
 - BLE/SLE 扫描、权限及 ACK 已有 SDK 调用原型；仍缺 **DevEco HAP 编译验证**、完整配对/认领、真实广播、真实 ACK 和 GATT/SSAP UUID 固化。
-- 设备侧 BEGIN/CHUNK/COMMIT 接收解码并映射 C99 Desk Core。
+- C99 设备侧 BEGIN/CHUNK/COMMIT **解析器已实现并通过宿主机测试**，但还未集成到 WS63 的 BLE/SLE 服务端和 Desk Core UI 任务。
 - 真实 WS63/LVGL 固件编译、烧录、三模共存与功耗实测。
 
 ## 当前实际测试证据
@@ -89,3 +90,10 @@ apps/harmony/
 - **用户设备**：已知有小鸿 AI 与 HarmonyOS 7 手机，但现在不需要真机操作。进入实测关卡前先完成 [#7 无实机编译验收](https://github.com/hu-qi/XiaohongDeskCard/issues/7)，再开展 [#8 真机验收](https://github.com/hu-qi/XiaohongDeskCard/issues/8)。
 
 注意：设备扫描可以发现某个广播名称，但不能凭名称证明它是可信的 XiaohongDeskCard 设备。**设备所有权、身份验证和安全写入**必须单独实现。
+
+
+## 三模自动选择的安全边界（已实现并测试）
+
+`DeskRouter.ts`：只有连接或读取状态失败（尚未发送写入）时，才能按顺序切换 SLE → BLE → Wi-Fi。若调用 `setContent()` 后出现超时、断连、ACK 丢失，则抛出 `DeskOutcomeUnknownError`，**不会在另一无线通道盲目重发**；需先读取设备的最新 revision/content 进行人工或显式的状态核对。明确的业务拒绝（如 CONFLICT）同样不能被当成无线失败重试。
+
+该路由器本身由 Node 22 对真实 TypeScript 源文件执行单测（不用复制一份模拟逻辑）。ArkUI 页面新增“自动选择链路 · Mock”按钮，仅用于验证能力选择和回退，并不是实际手机三模直连。真实连接、鉴权、STATUS/ACK 以及 DevEco HAP 编译仍在 Issue #7 验收范围内。
