@@ -157,3 +157,20 @@ C99 `firmware/core/desk_nv_store.[ch]` 已实现双槽版本记录、CRC32 和�
 [存储设计与 HAL 对接](docs/NV_STORAGE.md) · [Issue #7 SDK 编译待办](https://github.com/hu-qi/XiaohongDeskCard/issues/7)。
 
 **注意**：这不等于真实小鸿 Flash/HarmonyOS HAP 构建或掉电实测，仍不需要用户操作实机。
+
+
+## 真实 LVGL 编译与 WS63 构建暂存目录
+
+已新增 GitHub Actions 双版本验证：**真实 LVGL 8.3.11 和 LVGL 9.3.0** 分别与 Desk View 源码链接，运行 240×240 无屏幕绘制测试。此前仅有 LVGL stub 的兼容风险已有所降低；小鸿原固件 LVGL 版本仍待实际源码检查。
+
+无需 SDK 也可以生成待审查的 WS63 C 源码暂存目录：
+
+```bash
+python3 tools/ws63_overlay.py --output build/ws63-overlay
+```
+
+生成 8 个 C 源文件、8 个头文件、`BUILD.gn.fragment` 和 SHA-256 manifest；不会自动修改任何上游工程，更不会烧录硬件。
+
+[真实 LVGL 8/9 验证说明](docs/LVGL_SDK_COMPAT.md) · [SDK 集成与 Overlay 指南](docs/WS63_INTEGRATION.md)。
+
+**尚未完成 OpenHarmony WS63 `hb build` 与 DevEco HAP 编译；用户目前不需要进行真机操作。**
