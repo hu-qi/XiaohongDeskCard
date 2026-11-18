@@ -3,12 +3,17 @@ on:
   push:
     paths: ["firmware/core/**", "tools/simulator/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
   pull_request:
-    paths: ["firmware/core/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+    paths: ["firmware/core/**", "tools/simulator/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Router policy (Node 22 native TS stripping)
+        run: node --experimental-strip-types --test tests/router.test.mjs
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
       - name: Compile
