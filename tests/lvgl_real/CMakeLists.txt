@@ -9,7 +9,14 @@ endif()
 # Actual LVGL source is built as a proper static C library; C compiler and
 # headers here are real, no fake lvgl.h or stub implementation.
 set(LV_CONF_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lv_conf.h")
+set(LV_BUILD_CONF_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "" FORCE)
+set(CONFIG_LV_USE_THORVG_INTERNAL OFF CACHE BOOL "" FORCE)
 add_subdirectory("${DESK_LVGL_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/vendor_lvgl")
+# The LVGL v8 custom.cmake normally locates lv_conf.h relative to its tree.
+# The explicit include also supports the nested GitHub Actions checkout path.
+target_include_directories(lvgl PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_executable(test_lvgl_real
     test_lvgl_real.c
