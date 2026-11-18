@@ -91,6 +91,11 @@ class DeskSimulator:
             ctypes.c_size_t, ctypes.c_int
         ]
         self.lib.desk_sim_apply_fragmented.restype = ctypes.c_int
+        self.lib.desk_sim_encode_ack.argtypes = [
+            ctypes.c_uint32, ctypes.c_int,
+            ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t
+        ]
+        self.lib.desk_sim_encode_ack.restype = ctypes.c_int
         self.lib.desk_sim_result_name.argtypes = [ctypes.c_int]
         self.lib.desk_sim_result_name.restype = ctypes.c_char_p
         if self.lib.desk_sim_init(os.fsencode(snapshot_path)) != 1:
@@ -127,9 +132,34 @@ class DeskSimulator:
                     array, len(frame), fragment_bytes, int(authorized))
             else:
                 raise ValueError("unknown mock transport")
-            return {"result": self.lib.desk_sim_result_name(result).decode("ascii"),
-                    "transport": transport.upper() + ("_MOCK" if transport != "wifi" else "_HTTP"),
-                    "state": self._snapshot_locked()}
+            state = self._snapshot_locked()
+            answer = {
+                "result": self.lib.desk_sim_result_name(result).decode("ascii"),
+                "transport": transport.upper() + ("_MOCK" if transport != "wifi" else "_HTTP"),
+                "state": state,
+            }
+            if transport in ("ble", "sle"):
+                ack_buffer = (ctypes.c_uint8 * 16)()
+                if self.lib.desk_sim_encode_ack(command["requestId"], result,
+                                                ack_buffer, 16) != 1:
+                    raise RuntimeError("cannot encode business ACK")
+                ack_bytes = bytes(ack_buffer)
+                header = ack_bytes[:12]
+                magic, version, code, reserved, req_id, rev = struct.unpack(
+                    "<BBBBII", header)
+                ack_crc = struct.unpack("<I", ack_bytes[12:])[0]
+                if (magic, version, reserved) != (0xD6, 1, 0) or (
+                    req_id != command["requestId"] or rev != state["revision"]
+                    or ack_crc != zlib.crc32(header)
+                ):
+                    raise RuntimeError("C business ACK failed independent Python validation")
+                answer["radioAck"] = {
+                    "requestId": req_id,
+                    "revision": rev,
+                    "resultCode": code,
+                    "wireHex": ack_bytes.hex()
+                }
+            return answer
 
 
 def make_handler(simulator: DeskSimulator, token: str, html_path: Path):
