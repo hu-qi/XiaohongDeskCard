@@ -13,7 +13,12 @@ import { DeskAck, DeskChannel, DeskSetCommand, DeskState, DeskTransport } from '
 export class WifiHttpTransport implements DeskTransport {
   readonly channel: DeskChannel = DeskChannel.WIFI;
 
-  constructor(private readonly baseUrl: string, private readonly token: string) {
+  private baseUrl: string;
+  private token: string;
+
+  constructor(baseUrl: string, token: string) {
+    this.baseUrl = baseUrl;
+    this.token = token;
   }
 
   async getStatus(): Promise<DeskState> {
