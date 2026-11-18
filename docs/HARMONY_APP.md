@@ -11,7 +11,7 @@
 - BLE Mock、SLE Mock：**纯 ArkTS 本地内存模拟**，不触发蓝牙或星闪。
 - Wi-Fi HTTP：NetworkKit 的真实网络请求，需要用户输入端点和令牌。后端可选择真实设备或测试服务。
 - Mac/Linux 浏览器模拟器：本地 loopback HTTP + 真实 C99 Desk Core；它比 ArkTS 内存 Mock 更接近固件业务行为。
-- BLE/SLE 原生适配源码 `BleGattLink.ets` / `SleSsapLink.ets`：调用系统连接和写入 API，但**尚未接入真实桌牌 UUID / 广播 / 设备鉴权 / 业务 ACK**，没有纳入用户界面的真实写入按钮。
+- BLE/SLE 原生适配源码 `BleGattLink.ets` / `SleSsapLink.ets`：调用扫描/连接/写入和通知 SDK，并已补充业务 ACK 解码/超时。现有 UUID **只是拟定值**，WS63 端尚未实现对应服务。真实无线写入按钮尚未启用。
 
 ## 工程结构
 
@@ -36,6 +36,11 @@ apps/harmony/
         WifiHttpTransport.ets
         NearLinkCapability.ets
         DeskWireFrame.ets
+        DeskAckFrame.ets
+        DeskAckWaiter.ets
+        DeskServiceIds.ets
+        DeskDeviceDiscovery.ets
+        DeskPermissions.ets
         BleGattLink.ets
         SleSsapLink.ets
       resources/base/profile/main_pages.json
@@ -66,13 +71,21 @@ apps/harmony/
 
 ## 安全说明
 
-`module.json5` 已声明 INTERNET、ACCESS_BLUETOOTH、ACCESS_NEARLINK，但**声明不等于用户授权**。未来接入真机的扫描/连接 UI 前还必须执行动态权限申请，并在拒绝授权时降级。
+`module.json5` 已声明 INTERNET、ACCESS_BLUETOOTH、ACCESS_NEARLINK，但**声明不等于用户授权**。扫描界面源码已通过 `DeskPermissions.request` 接入运行时授权，但实际授权弹窗、拒绝处理和手机 API 行为**仍待 DevEco 编译及真机测试**。
 
 模拟 HTTP 令牌只适用于本机开发。不要在不可信局域网明文发送生产令牌或把 Mock HTTP 服务公开到 Internet。
 
 ## 还缺什么？
 
 - DevEco 真正构建验证与图标等资源兼容修复。
-- 设备扫描、配对/认领、动态权限申请、ACK 通知/超时、完整 GATT/SSAP UUID 冻结。
+- BLE/SLE 扫描、权限及 ACK 已有 SDK 调用原型；仍缺 **DevEco HAP 编译验证**、完整配对/认领、真实广播、真实 ACK 和 GATT/SSAP UUID 固化。
 - 设备侧 BEGIN/CHUNK/COMMIT 接收解码并映射 C99 Desk Core。
 - 真实 WS63/LVGL 固件编译、烧录、三模共存与功耗实测。
+
+## 当前实际测试证据
+
+- **Host CI**：C99 Core / Binary ACK / HTTP 模拟器 / Stage 结构检查，可在 GitHub Actions 查询。结构检查不会调用 ArkTS 编译器。
+- **App SDK 源码**：`DeskDeviceDiscovery`、`DeskPermissions`、`DeskAckWaiter`、`BleGattLink`、`SleSsapLink` 已提交但仍属待编译原型。
+- **用户设备**：已知有小鸿 AI 与 HarmonyOS 7 手机，但现在不需要真机操作。进入实测关卡前先完成 [#7 无实机编译验收](https://github.com/hu-qi/XiaohongDeskCard/issues/7)，再开展 [#8 真机验收](https://github.com/hu-qi/XiaohongDeskCard/issues/8)。
+
+注意：设备扫描可以发现某个广播名称，但不能凭名称证明它是可信的 XiaohongDeskCard 设备。**设备所有权、身份验证和安全写入**必须单独实现。
