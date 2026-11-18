@@ -1,9 +1,9 @@
 name: Desk Software Baseline (host)
 on:
   push:
-    paths: ["firmware/core/**", "firmware/display/**", "firmware/platform/ws63/**", "tools/simulator/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+    paths: ["firmware/core/**", "firmware/display/**", "firmware/platform/ws63/**", "tools/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
   pull_request:
-    paths: ["firmware/core/**", "firmware/display/**", "firmware/platform/ws63/**", "tools/simulator/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+    paths: ["firmware/core/**", "firmware/display/**", "firmware/platform/ws63/**", "tools/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
 jobs:
   test:
     runs-on: ubuntu-latest
