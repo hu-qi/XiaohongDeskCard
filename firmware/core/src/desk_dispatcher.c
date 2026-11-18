@@ -70,8 +70,13 @@ bool desk_dispatcher_process_one(desk_dispatcher_t *dispatcher)
     dispatcher->count--;
     queue_unlock(dispatcher);
 
+    bool currently_authorized = item.authorized;
+    if (currently_authorized && dispatcher->hooks.authorize_on_ui != NULL) {
+        currently_authorized = dispatcher->hooks.authorize_on_ui(
+            dispatcher->hooks.context, item.channel, item.peer_token);
+    }
     const desk_result_t result =
-        desk_core_apply(dispatcher->core, &item.command, item.authorized);
+        desk_core_apply(dispatcher->core, &item.command, currently_authorized);
     if (dispatcher->hooks.on_result != NULL) {
         const desk_ack_t ack = {
             item.command.request_id,
