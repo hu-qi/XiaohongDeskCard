@@ -5,7 +5,8 @@ add_library(desk_core STATIC
     firmware/core/src/desk_core.c
     firmware/core/src/desk_wire.c
     firmware/core/src/desk_packet.c
-    firmware/core/src/desk_dispatcher.c)
+    firmware/core/src/desk_dispatcher.c
+    firmware/core/src/desk_radio_ingress.c)
 target_include_directories(desk_core PUBLIC firmware/core/include)
 set_target_properties(desk_core PROPERTIES
     C_STANDARD 99 C_STANDARD_REQUIRED YES POSITION_INDEPENDENT_CODE ON)
@@ -33,6 +34,10 @@ add_test(NAME desk_packet_tests COMMAND test_packet)
 add_executable(test_dispatcher tests/test_dispatcher.c)
 target_link_libraries(test_dispatcher PRIVATE desk_core)
 add_test(NAME desk_dispatcher_tests COMMAND test_dispatcher)
+
+add_executable(test_radio_ingress tests/test_radio_ingress.c)
+target_link_libraries(test_radio_ingress PRIVATE desk_core)
+add_test(NAME desk_radio_ingress_tests COMMAND test_radio_ingress)
 
 # LVGL 8 API surface is compiled against a deliberately small HOST stub.
 # This tests view logic/ownership but NOT the upstream LVGL or actual ST7789.
