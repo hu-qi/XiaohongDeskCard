@@ -125,6 +125,9 @@ export class BleGattLink {
                           timeoutMs: number = 15000): Promise<DeskRadioAck> {
     if (!this.notificationReady) throw new Error('BLE ACK notification not subscribed');
     const pending: Promise<DeskRadioAck> = this.ackWaiter.wait(requestId, timeoutMs);
+    // Attach a rejection observer immediately: ACK may time out while radio
+    // writes are still pending. The original Promise remains rejected.
+    pending.catch((_error: Error) => {});
     try {
       await this.sendFrame(frame);
       return await pending;
