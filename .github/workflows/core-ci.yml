@@ -31,16 +31,24 @@ jobs:
           cmake --build build-ubsan --parallel
           ctest --test-dir build-ubsan --output-on-failure -R desk_ -E desk_sim_http_tests
 
-  lvgl-v8-api:
-    name: Real LVGL 8.3.11 host compile
+  lvgl-real-api:
+    name: Real LVGL ${{ matrix.version }} host compile
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: '8.3.11'
+            commit: 74d0a816a440eea53e030c4f1af842a94f7ce3d3
+          - version: '9.3.0'
+            commit: c033a98afddd65aaafeebea625382a94020fe4a7
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch pinned actual LVGL 8.3.11 source
+      - name: Fetch pinned real LVGL source
         uses: actions/checkout@v4
         with:
           repository: lvgl/lvgl
-          ref: 74d0a816a440eea53e030c4f1af842a94f7ce3d3
+          ref: ${{ matrix.commit }}
           path: external/lvgl
           persist-credentials: false
       - name: Configure against actual LVGL library
