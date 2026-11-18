@@ -3,18 +3,36 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Real LVGL 8 draw buffer; flush deliberately discards pixels on host. */
+/* Real LVGL v8 and v9 have different display driver APIs. Both run with
+ * a headless flush callback so this test needs NO TFT or desktop window. */
+#if LVGL_VERSION_MAJOR >= 9
+static void flush(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
+{
+    (void)area;
+    (void)pixels;
+    lv_display_flush_ready(display);
+}
+#else
 static void flush(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *colors)
 {
     (void)area;
     (void)colors;
     lv_disp_flush_ready(drv);
 }
+#endif
 
 int main(void)
 {
     lv_init();
-
+#if LVGL_VERSION_MAJOR >= 9
+    static uint8_t draw_pixels[240u * 12u * 2u];
+    lv_display_t *display = lv_display_create(240, 240);
+    assert(display != NULL);
+    lv_display_set_flush_cb(display, flush);
+    lv_display_set_buffers(display, draw_pixels, NULL, sizeof(draw_pixels),
+                           LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_obj_t *screen = lv_screen_active();
+#else
     static lv_color_t draw_pixels[240u * 12u];
     static lv_disp_draw_buf_t draw_buf;
     lv_disp_draw_buf_init(&draw_buf, draw_pixels, NULL, 240u * 12u);
@@ -27,10 +45,12 @@ int main(void)
     disp_drv.draw_buf = &draw_buf;
     lv_disp_t *display = lv_disp_drv_register(&disp_drv);
     assert(display != NULL);
-    assert(LVGL_VERSION_MAJOR == 8 && LVGL_VERSION_MINOR == 3);
+    lv_obj_t *screen = lv_scr_act();
+#endif
+    assert(LVGL_VERSION_MAJOR == 8 || LVGL_VERSION_MAJOR == 9);
 
     desk_lvgl_view_t view = {0};
-    assert(desk_lvgl_view_create(&view, lv_scr_act()));
+    assert(desk_lvgl_view_create(&view, screen));
     lv_obj_update_layout(view.root);
     assert(lv_obj_get_width(view.root) == 240);
     assert(lv_obj_get_height(view.root) == 240);
