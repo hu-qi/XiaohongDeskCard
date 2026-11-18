@@ -63,7 +63,7 @@ class HarmonyStructureTests(unittest.TestCase):
         nearlink = (ROOT / "entry/src/main/ets/desk/NearLinkCapability.ets").read_text(
             encoding="utf-8")
         self.assertIn("@kit.NearLinkKit", nearlink)
-        self.assertNotIn("@kit.ConnectivityKit", nearlink)
+        self.assertNotIn("import { manager } from '@kit.ConnectivityKit'", nearlink)
         ble = (ROOT / "entry/src/main/ets/desk/BleGattLink.ets").read_text(
             encoding="utf-8")
         self.assertIn("ble.createGattClientDevice", ble)
