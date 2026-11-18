@@ -106,3 +106,21 @@ curl -X PUT http://127.0.0.1:8765/api/v1/desk/content \
 详见 [HarmonyOS 集成与边界说明](docs/HARMONY_APP.md)。
 
 **当前 GitHub CI 检查的是宿主机 C99/HTTP 逻辑与 Stage 文件结构，并非 HAP 编译成功，也不代表 BLE/SLE 物理链路已联通。**
+
+## 2026-11-19 · 三模 ACK、发现和实机验收关卡
+
+本分支继续推进了以下**源代码实现（尚未进行 DevEco/WS63 编译）**：
+
+1. **Desk Wire ACK v1**：C99 编解码 16 字节业务 ACK（requestId、revision、resultCode、CRC32）；BLE/SLE 软件模拟器已生成并校验真实 C 编码的 ACK。
+2. **HarmonyOS ACK 处理**：`DeskAckFrame.ets`、`DeskAckWaiter.ets`；BLE GATT 与 SLE SSAP 原型订阅通知，在接收到对应 ACK 之后才认为业务执行完成。无 ACK 不得标记成功。
+3. **发现与权限**：`DeskDeviceDiscovery.ets` 基于官方 BLE 和 NearLink Kit 的扫描接口；`DeskPermissions.ets` 按通道申请用户授权；ArkUI 界面新增设备扫描入口。需在目标 SDK/真机编译验证。
+4. **协议服务表**：声明了项目专用的**暂定 UUID**、广播名称；设备端必须实现对应 GATT/SSAP 服务才能连接。
+5. **C99 重试修复**：防止同一 requestId 但不同 expectedRevision 被误当成幂等重试；如果落盘成功而界面渲染失败，重试可以再次尝试渲染。
+
+详细材料：[Desk Wire v1](docs/WIRE_V1.md) · [HarmonyOS App](docs/HARMONY_APP.md) · [实机验收关卡](docs/HARDWARE_GATE.md)。
+
+研发闸口：[#7 无实机 DevEco/WS63 SDK 编译验收](https://github.com/hu-qi/XiaohongDeskCard/issues/7) → [#8 小鸿 AI + HarmonyOS 7 真机验收](https://github.com/hu-qi/XiaohongDeskCard/issues/8)。
+
+用户已有小鸿 AI 和 HarmonyOS 7 手机，**当前无需接线、烧录或提供手机日志**；只有 Gate A/B 通过后，才要求操作真机。系统为 HarmonyOS 7 不等于手机一定具备 NearLink 硬件能力，须实测。
+
+⚠️ GitHub Actions 的成功仅证明宿主机 C99、HTTP 模拟器与 Stage 文件结构检查通过，**不等价于 ArkTS/HAP 编译或无线连接成功**。
