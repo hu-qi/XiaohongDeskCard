@@ -20,3 +20,11 @@ Official sample locations to inspect:
 - `vendor/atomgit/xiaohong/samples/13_sle_uart/`
 
 **No WS63 build or device flash has been executed by this repository yet.**
+
+
+## Tested NV journal and UI-time authorization
+
+- Include `desk_nv_store.c`, `desk_radio_ingress.c`, `desk_dispatcher.c`, `desk_view_lvgl.c`, and `desk_ws63_glue.c` with the existing C99 core sources in a reviewed WS63 `BUILD.gn`.
+- The portable two-slot journal needs real `read/erase/program` bindings to **two independently erasable** WS63 Flash regions. See [NV_STORAGE.md](../../../docs/NV_STORAGE.md).
+- Production `desk_ws63_callbacks_t.authorize_on_ui` is now **mandatory**: validate current peer token and device ownership immediately before processing a queued command.
+- Actual WS63 SDK compilation, Flash HAL, BLE/SLE service tables, and hardware are still unverified.
