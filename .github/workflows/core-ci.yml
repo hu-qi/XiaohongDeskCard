@@ -30,6 +30,15 @@ jobs:
         run: |
           cmake --build build-ubsan --parallel
           ctest --test-dir build-ubsan --output-on-failure -R desk_ -E desk_sim_http_tests
+      - name: Stage WS63 review-only source overlay
+        run: python3 tools/ws63_overlay.py --output build/ws63-overlay
+      - name: Publish WS63 source staging (NOT FLASHABLE)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ws63-deskcard-source-staging
+          path: build/ws63-overlay/
+          if-no-files-found: error
+          retention-days: 14
 
   lvgl-real-api:
     name: Real LVGL ${{ matrix.version }} host compile
