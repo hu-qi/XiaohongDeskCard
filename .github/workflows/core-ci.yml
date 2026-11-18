@@ -1,7 +1,7 @@
-name: Desk Core (host)
+name: Desk Software Baseline (host)
 on:
   push:
-    paths: ["firmware/core/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+    paths: ["firmware/core/**", "tools/simulator/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
   pull_request:
     paths: ["firmware/core/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
 jobs:
