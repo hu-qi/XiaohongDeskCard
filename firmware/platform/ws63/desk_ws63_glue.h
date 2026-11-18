@@ -22,6 +22,10 @@ typedef struct {
     void (*lock)(void *context);
     void (*unlock)(void *context);
     void *context;
+    /* MANDATORY: check peer connection generation & owner authorization at
+     * execution time, including for Wi-Fi sessions. */
+    bool (*authorize_on_ui)(void *context, desk_channel_t channel,
+                            uint32_t peer_token);
 } desk_ws63_callbacks_t;
 
 typedef struct {
