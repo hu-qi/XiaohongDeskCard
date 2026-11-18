@@ -12,14 +12,14 @@
 - [x] 16-byte business ACK、CRC32 与请求 ID 关联，宿主机自动化测试
 - [x] HarmonyOS Stage 工程、编辑 UI、BLE/SLE 扫描和 SDK 写入源码初稿
 - [ ] DevEco Studio / Hvigor **真实构建通过 HAP**（GitHub 结构检查不等于 HAP 编译）
-- [ ] 在软件模拟环境验证连接管理、ACK 超时与回退策略
+- [x] 软件侧校验分包恢复、CRC、超时及预写入安全回退策略（Node 22 + C99 测试；非无线实测）
 - [ ] 指定安全的受控局域网/模拟器互联测试方案
 
 ## Gate B：SDK 编译验证（无需设备）— 未开始
 
 - [ ] 固定并记录小鸿 WS63 原仓库及 SDK 的实际 commit、构建说明和工具链
 - [ ] 编译原始官方样例，保存成功日志与产物校验和
-- [ ] 在源码层接入 `desk_core`、`desk_wire`、LVGL 桌牌控件和 NV 持久化
+- [ ] 在源码层接入 `desk_core`、`desk_wire`、`desk_packet`、LVGL 桌牌控件和 NV 持久化
 - [ ] 编译 BLE GATT Peripheral/Server 与 SLE SSAP Server，并加入相同 UUID
 - [ ] 编译 Wi-Fi HTTP 控制接口与业务 ACK，确认三者任务边界
 - [ ] 检查 RAM/Flash 预算、字符集与 UI 任务单线程约束
