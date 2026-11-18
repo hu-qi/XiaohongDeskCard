@@ -1,6 +1,8 @@
 """Black-box HTTP tests against the actual compiled C99 core through ctypes."""
 import json
 import os
+import struct
+import zlib
 from pathlib import Path
 import sys
 import tempfile
@@ -86,6 +88,17 @@ class SimulatorTests(unittest.TestCase):
                 self.assertEqual(body["state"]["revision"], before + 1)
                 self.assertEqual(body["state"]["display"]["name"], "李四")
                 self.assertEqual(body["transport"], transport.upper() + "_MOCK")
+                ack = body["radioAck"]
+                wire = bytes.fromhex(ack["wireHex"])
+                self.assertEqual(len(wire), 16)
+                magic, version, code, reserved, req_id, revision = struct.unpack(
+                    "<BBBBII", wire[:12])
+                self.assertEqual((magic, version, code, reserved), (0xD6, 1, 0, 0))
+                self.assertEqual(req_id, ack["requestId"])
+                self.assertEqual(revision, body["state"]["revision"])
+                self.assertEqual(
+                    struct.unpack("<I", wire[12:])[0], zlib.crc32(wire[:12]))
+
 
     def test_03_unauthorized_rejected(self):
         previous = self.sim.snapshot()
