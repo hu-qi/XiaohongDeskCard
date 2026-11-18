@@ -160,3 +160,17 @@ const char *desk_sim_result_name(int code)
 {
     return desk_result_name((desk_result_t)code);
 }
+
+/* Serialize a real binary ACK from C Desk Core state after an applied request. */
+int desk_sim_encode_ack(uint32_t request_id, int result_code,
+                        uint8_t *out, size_t capacity)
+{
+    if (!g_initialized || result_code < DESK_OK ||
+        result_code > DESK_REVISION_EXHAUSTED) return 0;
+    const desk_ack_t ack = {
+        request_id,
+        g_core.revision,
+        (desk_result_t)result_code
+    };
+    return desk_wire_encode_ack(&ack, out, capacity) == DESK_WIRE_OK;
+}
