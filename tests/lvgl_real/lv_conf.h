@@ -1,5 +1,5 @@
 /**
- * Standalone LVGL v8 host test configuration.
+ * Standalone LVGL v8/v9 host test configuration.
  * NOT the memory/font/peripheral configuration used by WS63 firmware.
  */
 #ifndef LV_CONF_H
