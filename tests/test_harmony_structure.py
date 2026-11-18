@@ -1,5 +1,6 @@
 """Structural checks only. Does not compile ArkTS or build a HAP."""
 import json
+import re
 from pathlib import Path
 import unittest
 import xml.etree.ElementTree as ET
@@ -48,7 +49,9 @@ class HarmonyStructureTests(unittest.TestCase):
         for name in (
             "DeskModels.ets", "MockDeskTransport.ets", "WifiHttpTransport.ets",
             "NearLinkCapability.ets", "DeskWireFrame.ets",
-            "BleGattLink.ets", "SleSsapLink.ets"
+            "BleGattLink.ets", "SleSsapLink.ets",
+            "DeskAckFrame.ets", "DeskAckWaiter.ets", "DeskServiceIds.ets",
+            "DeskDeviceDiscovery.ets", "DeskPermissions.ets"
         ):
             with self.subTest(file=name):
                 self.assertTrue((desk / name).exists())
@@ -58,6 +61,9 @@ class HarmonyStructureTests(unittest.TestCase):
         self.assertIn("BLE Mock", page)
         self.assertIn("SLE Mock", page)
         self.assertIn("isNearLinkAvailable", page)
+        self.assertIn("DeskPermissions.request", page)
+        self.assertIn("new DeskDeviceDiscovery", page)
+        self.assertIn("扫描星闪设备", page)
 
     def test_api_generation(self):
         nearlink = (ROOT / "entry/src/main/ets/desk/NearLinkCapability.ets").read_text(
@@ -70,6 +76,27 @@ class HarmonyStructureTests(unittest.TestCase):
         sle = (ROOT / "entry/src/main/ets/desk/SleSsapLink.ets").read_text(
             encoding="utf-8")
         self.assertIn("ssap.createClient", sle)
+        self.assertIn("setPropertyNotification", sle)
+        self.assertIn("sendFrameAwaitAck", sle)
+        self.assertIn("setCharacteristicChangeNotification", ble)
+        self.assertIn("sendFrameAwaitAck", ble)
+
+    def test_ack_and_service_ids(self):
+        desk = ROOT / "entry/src/main/ets/desk"
+        ack = (desk / "DeskAckFrame.ets").read_text(encoding="utf-8")
+        self.assertIn("bytes[0] !== 0xD6", ack)
+        self.assertIn("DeskWireFrame.crc32", ack)
+        ids = (desk / "DeskServiceIds.ets").read_text(encoding="utf-8")
+        uuids = re.findall(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", ids
+        )
+        self.assertEqual(len(uuids), 4)
+        self.assertEqual(len(set(uuids)), 4)
+        protocol = (ROOT.parent.parent / "docs/WIRE_V1.md").read_text(encoding="utf-8")
+        for uid in uuids:
+            self.assertIn(uid, protocol)
+        hardware_gate = ROOT.parent.parent / "docs/HARDWARE_GATE.md"
+        self.assertIn("HarmonyOS 7", hardware_gate.read_text(encoding="utf-8"))
 
 if __name__ == "__main__":
     unittest.main()
