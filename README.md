@@ -146,3 +146,14 @@ curl -X PUT http://127.0.0.1:8765/api/v1/desk/content \
 [无线服务端接入说明](docs/RADIO_INGRESS.md) · [WS63 集成](docs/WS63_INTEGRATION.md)。
 
 GitHub Actions 在宿主机运行 CTest、Node 22 路由测试及 UBSan 编译检查；这些结果**不是 DevEco/HAP/WS63 SDK 编译，不代表 BLE/SLE 射频实测**。真机仍仅在 [Issue #8](https://github.com/hu-qi/XiaohongDeskCard/issues/8) 阶段才需要用户参与。
+
+
+## Flash/NV 与撤销授权的新增验证
+
+C99 `firmware/core/desk_nv_store.[ch]` 已实现双槽版本记录、CRC32 和最后提交标记，配套 248 个写入断电位置的故障模拟。`desk_ws63_glue` 现在强制要求设备提供 `authorize_on_ui`，避免已经排队的无线命令在权限撤销后继续落盘。
+
+`test_nv_glue.c` 额外测试了模拟 SLE 写入 → NV → LVGL → ACK → 冷启动恢复，以及撤销绑定后拒绝更新。
+
+[存储设计与 HAL 对接](docs/NV_STORAGE.md) · [Issue #7 SDK 编译待办](https://github.com/hu-qi/XiaohongDeskCard/issues/7)。
+
+**注意**：这不等于真实小鸿 Flash/HarmonyOS HAP 构建或掉电实测，仍不需要用户操作实机。
