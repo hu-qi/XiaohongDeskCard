@@ -11,6 +11,8 @@
 - [x] BLE/SLE Mock 分片与真实 C99 Core HTTP 模拟器
 - [x] 16-byte business ACK、CRC32 与请求 ID 关联，宿主机自动化测试
 - [x] HarmonyOS Stage 工程、编辑 UI、BLE/SLE 扫描和 SDK 写入源码初稿
+- [x] 三模入口统一有界命令队列、LVGL 240×240 界面与 SDK 无关 glue，在宿主机模拟编译/测试通过
+- [x] 小鸿 OpenHarmony 源码布局离线预检查器及测试（不等于执行真实 SDK 构建）
 - [ ] DevEco Studio / Hvigor **真实构建通过 HAP**（GitHub 结构检查不等于 HAP 编译）
 - [x] 软件侧校验分包恢复、CRC、超时及预写入安全回退策略（Node 22 + C99 测试；非无线实测）
 - [ ] 指定安全的受控局域网/模拟器互联测试方案
@@ -19,7 +21,7 @@
 
 - [ ] 固定并记录小鸿 WS63 原仓库及 SDK 的实际 commit、构建说明和工具链
 - [ ] 编译原始官方样例，保存成功日志与产物校验和
-- [ ] 在源码层接入 `desk_core`、`desk_wire`、`desk_packet`、LVGL 桌牌控件和 NV 持久化
+- [ ] 将已写好的 `desk_core`、`desk_wire`、`desk_packet`、`desk_dispatcher`、LVGL 控件及 `desk_ws63_glue` 真正植入上游 SDK GN 构建并编译；NV 双槽适配仍待开发
 - [ ] 编译 BLE GATT Peripheral/Server 与 SLE SSAP Server，并加入相同 UUID
 - [ ] 编译 Wi-Fi HTTP 控制接口与业务 ACK，确认三者任务边界
 - [ ] 检查 RAM/Flash 预算、字符集与 UI 任务单线程约束
@@ -76,3 +78,7 @@
 ## 判定
 
 只有真实 WS63 与 HarmonyOS 手机完成上述闭环，才可以把项目状态从 `SOFTWARE VERIFIED` 升级到 `HARDWARE VERIFIED`。对于双小鸿官方 SLE UART 示例，第二块板卡是可选的独立参考验证，并不是手机直连验证的必需前置条件。
+
+### 适配依据
+
+详细工程接入路径、事件流与离线源码预检查见 [WS63_INTEGRATION.md](WS63_INTEGRATION.md)。当前 CI 只编译 C99 与 LVGL **测试替身**；没有运行上游 `hb build`，没有烧录固件。
