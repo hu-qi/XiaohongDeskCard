@@ -128,3 +128,11 @@ node --experimental-strip-types --test tests/router.test.mjs
 2. [Issue #8：小鸿 AI + HarmonyOS 7 真机验收](https://github.com/hu-qi/XiaohongDeskCard/issues/8)
 
 到 Issue #8 才需要用户配合烧录和手机操作。HarmonyOS 7 手机是否支持 SLE，要通过实际设备能力检查，不能仅凭系统版本作出判断。
+
+
+## 八、新增存储与授权边界
+
+- `firmware/core/desk_nv_store.[ch]`：248 字节双槽 Flash 记录、CRC32、最后提交标记。主机已模拟 248 个写入中断位置；**尚需真实 WS63 Flash HAL 和 SDK 编译**。参见 [NV_STORAGE.md](NV_STORAGE.md)。
+- `desk_ws63_glue`：`authorize_on_ui` 回调现在为必填，处理队列命令前再核验连接代际与设备所有权，防止排队时合法、执行时已撤销授权的写入。
+- `test_nv_glue.c`：模拟 SLE 更新 → NV 双槽写入 → LVGL 显示 → 业务 ACK → 冷启动恢复。
+- 对接 `BUILD.gn` 时需增加 `desk_nv_store.c`；实际 Flash 擦除块大小和 SDK 编程对齐要求必须单独验证。
