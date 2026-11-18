@@ -90,9 +90,13 @@ desk_result_t desk_core_apply(desk_core_t *core, const desk_set_command_t *comma
         command->request_id == 0u) return DESK_BAD_INPUT;
     if (!authorized) return DESK_UNAUTHORIZED;
     if (core->has_last_request && core->last_request_id == command->request_id) {
-        return core->last_request_revision == core->revision &&
-                       same_content(&core->content, &command->content)
-                 ? DESK_OK : DESK_DUPLICATE_ID;
+        if (core->last_request_revision == core->revision &&
+            core->last_expected_revision == command->expected_revision &&
+            same_content(&core->content, &command->content)) {
+            /* A prior render may have failed after persistence: repaint on retry. */
+            return desk_core_repaint(core);
+        }
+        return DESK_DUPLICATE_ID;
     }
     if (command->expected_revision != core->revision) return DESK_CONFLICT;
     if (core->revision == UINT32_MAX) return DESK_REVISION_EXHAUSTED;
@@ -107,6 +111,7 @@ desk_result_t desk_core_apply(desk_core_t *core, const desk_set_command_t *comma
     core->revision = revision;
     core->last_request_id = command->request_id;
     core->last_request_revision = revision;
+    core->last_expected_revision = command->expected_revision;
     core->has_last_request = true;
     return desk_core_repaint(core);
 }
