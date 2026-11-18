@@ -1,0 +1,112 @@
+#include "desk_ws63_glue.h"
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+
+typedef struct {
+    unsigned wakes;
+    unsigned locks;
+    unsigned unlocks;
+    unsigned saves;
+    unsigned acks;
+    bool locked;
+    desk_content_t content;
+    uint32_t revision;
+    desk_ack_t last_ack;
+} fake_platform_t;
+
+static int load_nv(void *ctx, desk_content_t *out, uint32_t *rev)
+{
+    fake_platform_t *p = (fake_platform_t *)ctx;
+    if (p->revision == 0u) return 0;
+    *out = p->content;
+    *rev = p->revision;
+    return 1;
+}
+static int save_nv(void *ctx, const desk_content_t *content, uint32_t rev)
+{
+    fake_platform_t *p = (fake_platform_t *)ctx;
+    assert(!p->locked);
+    p->content = *content;
+    p->revision = rev;
+    p->saves++;
+    return 1;
+}
+static void notify(void *ctx)
+{
+    fake_platform_t *p = (fake_platform_t *)ctx;
+    assert(!p->locked);
+    p->wakes++;
+}
+static void ack(void *ctx, desk_channel_t channel, uint32_t peer,
+                const uint8_t bytes[DESK_ACK_SIZE])
+{
+    fake_platform_t *p = (fake_platform_t *)ctx;
+    assert(channel == DESK_CHANNEL_BLE && peer == 55u);
+    assert(desk_wire_decode_ack(bytes, DESK_ACK_SIZE, &p->last_ack) == DESK_WIRE_OK);
+    p->acks++;
+}
+static void lock(void *ctx)
+{
+    fake_platform_t *p = (fake_platform_t *)ctx;
+    assert(!p->locked);
+    p->locked = true;
+    p->locks++;
+}
+static void unlock(void *ctx)
+{
+    fake_platform_t *p = (fake_platform_t *)ctx;
+    assert(p->locked);
+    p->locked = false;
+    p->unlocks++;
+}
+
+int main(void)
+{
+    desk_ws63_port_t port = {0};
+    fake_platform_t platform = {0};
+    desk_dispatch_item_t item = {0};
+    assert(desk_ws63_port_submit(&port, &item) == DESK_DISPATCH_INVALID);
+    assert(desk_ws63_port_ui_drain(&port) == 0u);
+
+    desk_ws63_callbacks_t callbacks = {load_nv, save_nv, notify, ack, lock, unlock,
+                                       &platform};
+    assert(desk_ws63_port_init(&port, callbacks, NULL));
+    assert(lvgl_stub_objects_alive() == 6u);
+    assert(strcmp(port.view.name_label->text, "Xiaohong") == 0);
+
+    item.channel = DESK_CHANNEL_BLE;
+    item.peer_token = 55u;
+    item.authorized = true;
+    item.command.request_id = 1u;
+    item.command.expected_revision = 0u;
+    strcpy(item.command.content.name, "胡琦");
+    strcpy(item.command.content.title, "桌牌作者");
+    strcpy(item.command.content.organization, "OpenHarmony");
+    strcpy(item.command.content.theme, "modern");
+
+    assert(desk_ws63_port_submit(&port, &item) == DESK_DISPATCH_QUEUED);
+    assert(platform.wakes == 1u && platform.acks == 0u);
+    assert(strcmp(port.view.name_label->text, "Xiaohong") == 0);
+    assert(desk_ws63_port_ui_drain(&port) == 1u);
+    assert(platform.acks == 1u && platform.saves == 1u);
+    assert(port.core.revision == 1u);
+    assert(platform.last_ack.request_id == 1u);
+    assert(platform.last_ack.result == DESK_OK);
+    assert(strcmp(port.view.name_label->text, "胡琦") == 0);
+    assert(port.view.header->bg == 0x173A60u);
+    assert(platform.locks == platform.unlocks && !platform.locked);
+
+    desk_ws63_port_destroy(&port);
+    assert(lvgl_stub_objects_alive() == 0u);
+
+    /* Simulated restart: persisted content is restored by the storage hook. */
+    assert(desk_ws63_port_init(&port, callbacks, NULL));
+    assert(port.core.revision == 1u);
+    assert(strcmp(port.view.name_label->text, "胡琦") == 0);
+    desk_ws63_port_destroy(&port);
+    assert(lvgl_stub_objects_alive() == 0u);
+
+    puts("PASS: WS63 glue (mock platform): task boundary, NV, LVGL, ACK, restart");
+    return 0;
+}
