@@ -29,4 +29,4 @@ jobs:
       - name: Build and run sanitized C tests
         run: |
           cmake --build build-ubsan --parallel
-          ctest --test-dir build-ubsan --output-on-failure -R '^(desk_core_tests|desk_packet_tests|desk_dispatcher_tests|desk_radio_ingress_tests|desk_lvgl_view_host_tests|desk_ws63_glue_host_tests)
+          ctest --test-dir build-ubsan --output-on-failure -R desk_ -E desk_sim_http_tests
