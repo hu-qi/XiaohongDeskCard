@@ -41,10 +41,11 @@ python3 tools/ws63_preflight.py --root /path/to/openharmony --json
 | `firmware/core/src/desk_wire.c` | BLE/SLE 二进制命令与业务 ACK |
 | `firmware/core/src/desk_packet.c` | BEGIN/CHUNK/COMMIT、CRC、超时 |
 | `firmware/core/src/desk_dispatcher.c` | 三模接入统一 FIFO、有界队列、UI 任务串行执行 |
+| `firmware/core/src/desk_radio_ingress.c` | BLE/SLE 独立连接会话、分包解码与授权门禁、业务 ACK 关联 |
 | `firmware/display/desk_view_lvgl.c` | 原屏 240×240 姓名、职位、组织与主题 |
 | `firmware/platform/ws63/desk_ws63_glue.c` | 把 LVGL、Core、Queue、NV、ACK 连接成可调用接口 |
 
-建议先将这六个源文件与对应头文件放入小鸿工程独立子目录，并经审核后添加到 `vendor/atomgit/xiaohong/xiaohong/BUILD.gn` 的 `static_library("xiaohong")` source/include 清单。
+建议先将上述七个源文件与对应头文件放入小鸿工程独立子目录，并经审核后添加到 `vendor/atomgit/xiaohong/xiaohong/BUILD.gn` 的 `static_library("xiaohong")` source/include 清单。
 
 **本仓库暂不自动修改上游 BUILD.gn**：上游多版本的路径与条件编译不同，目前还未完成真实源码树/GN target 的固定验证。
 
@@ -111,7 +112,15 @@ node --experimental-strip-types --test tests/router.test.mjs
 
 它们使用的是 **主机端 LVGL 测试替身**，不是 OpenHarmony SDK 编译或 ST7789 显示测试。
 
-## 六、真正的验收仍然放在最后
+## 六、BLE/SLE 服务端接入新阶段
+
+现在已有 C99 `desk_radio_link_open` / `desk_radio_link_receive` / `desk_radio_link_ack_complete`，用于把真正的 **GATT Write / SSAP Property Write 原始分包**递交给 `desk_dispatcher`，生成的 ACK 必须由独立无线任务回复到原连接。
+
+详见 [RADIO_INGRESS.md](RADIO_INGRESS.md)，包括授权、连接代际 token、断连清理、队列满、ACK 时序及无线回调线程模型。
+
+**上游适配前仍缺**：真实 GATT/SSAP Service/Property 注册、通信栈回调、设备所有权、交互权限、HTTP 服务、Flash 存储、SDK 编译与跨通道验证。新加入的模块只是 SDK 无关的可移植逻辑。
+
+## 七、真正的验收仍然放在最后
 
 依次完成：
 
