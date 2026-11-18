@@ -32,3 +32,9 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(desk_sim_http_tests PROPERTIES
         ENVIRONMENT "DESK_SIM_LIB=$<TARGET_FILE:desk_simulator>")
 endif()
+
+if(Python3_Interpreter_FOUND)
+    add_test(NAME harmony_stage_structure
+        COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests -p test_harmony_structure.py
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+endif()
