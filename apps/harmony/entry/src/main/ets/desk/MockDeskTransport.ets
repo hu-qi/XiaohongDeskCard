@@ -14,6 +14,7 @@ export class MockDeskTransport implements DeskTransport {
   };
   private static lastRequestId: number = 0;
   private static lastRequestRevision: number = -1;
+  private static lastContent: DeskContent | null = null;
 
   constructor(channel: DeskChannel) {
     this.channel = channel;
@@ -28,7 +29,8 @@ export class MockDeskTransport implements DeskTransport {
     if (!this.isValid(command.content) || command.requestId < 1) {
       result = 'BAD_INPUT';
     } else if (command.requestId === MockDeskTransport.lastRequestId) {
-      result = command.expectedRevision === MockDeskTransport.lastRequestRevision ?
+      result = command.expectedRevision === MockDeskTransport.lastRequestRevision &&
+        this.sameContent(command.content, MockDeskTransport.lastContent) ?
         'OK' : 'DUPLICATE_ID';
     } else if (command.expectedRevision !== MockDeskTransport.revision) {
       result = 'CONFLICT';
@@ -42,12 +44,26 @@ export class MockDeskTransport implements DeskTransport {
       MockDeskTransport.revision += 1;
       MockDeskTransport.lastRequestId = command.requestId;
       MockDeskTransport.lastRequestRevision = command.expectedRevision;
+      MockDeskTransport.lastContent = {
+        name: command.content.name,
+        title: command.content.title,
+        organization: command.content.organization,
+        theme: command.content.theme
+      };
     }
     return {
       result: result,
       transport: this.channel.toUpperCase() + '_ARKTS_MOCK',
       state: MockDeskTransport.snapshot()
     };
+  }
+
+  private sameContent(left: DeskContent, right: DeskContent | null): boolean {
+    return right !== null &&
+      left.name === right.name &&
+      left.title === right.title &&
+      left.organization === right.organization &&
+      left.theme === right.theme;
   }
 
   private isValid(content: DeskContent): boolean {
