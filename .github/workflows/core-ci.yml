@@ -20,3 +20,13 @@ jobs:
         run: cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Configure C UndefinedBehaviorSanitizer
+        run: >
+          cmake -S . -B build-ubsan -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined"
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=undefined"
+      - name: Build and run sanitized C tests
+        run: |
+          cmake --build build-ubsan --parallel
+          ctest --test-dir build-ubsan --output-on-failure -R '^(desk_core_tests|desk_packet_tests|desk_dispatcher_tests|desk_radio_ingress_tests|desk_lvgl_view_host_tests|desk_ws63_glue_host_tests)
