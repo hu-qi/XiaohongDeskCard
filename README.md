@@ -135,4 +135,14 @@ curl -X PUT http://127.0.0.1:8765/api/v1/desk/content \
 - `tools/ws63_preflight.py`：检查 OpenHarmony 7 上游源码目录/关键文件并打印 vendor commit，不编译或烧录
 - 主机 LVGL/NV 测试替身及测试文件：不依赖开发板，也不伪称实际屏幕已显示
 
-完整集成步骤见 [WS63 适配指南](docs/WS63_INTEGRATION.md)。当前 GitHub Actions 运行 **8 项 CTest + Node 22 路由策略测试**。这些宿主机测试通过不代表 `hb build` 或 DevEco HAP 编译成功；硬件仅在 [Issue #8](https://github.com/hu-qi/XiaohongDeskCard/issues/8) 开始时需要用户参与。
+完整集成步骤见 [WS63 适配指南](docs/WS63_INTEGRATION.md)。当前 GitHub Actions 运行 C99、模拟器、HarmonyOS 结构及 Node 22 路由策略测试。这些宿主机测试通过不代表 `hb build` 或 DevEco HAP 编译成功；硬件仅在 [Issue #8](https://github.com/hu-qi/XiaohongDeskCard/issues/8) 开始时需要用户参与。
+
+## 2026-11-19 · BLE/SLE 设备端接收闭环（无实机）
+
+新增 `firmware/core/desk_radio_ingress.[ch]`：一个 BLE/SLE 连接一份独立会话，在绑定授权后接收 BEGIN/CHUNK/COMMIT 分片，经同一队列交给 Desk Core；只认可对应连接和请求 ID 的业务 ACK。收到旧连接 ACK、未经授权写入、分片破损、队列满时均不会误报成功。
+
+桌面模拟器已改为复用这一真实 C99 接收链路，而不是单独拼包后直接调用核心。对应 `tests/test_radio_ingress.c` 与 `tests/test_simulator.py` 覆盖软件闭环。
+
+[无线服务端接入说明](docs/RADIO_INGRESS.md) · [WS63 集成](docs/WS63_INTEGRATION.md)。
+
+GitHub Actions 在宿主机运行 CTest、Node 22 路由测试及 UBSan 编译检查；这些结果**不是 DevEco/HAP/WS63 SDK 编译，不代表 BLE/SLE 射频实测**。真机仍仅在 [Issue #8](https://github.com/hu-qi/XiaohongDeskCard/issues/8) 阶段才需要用户参与。
