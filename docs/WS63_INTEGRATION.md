@@ -136,3 +136,26 @@ node --experimental-strip-types --test tests/router.test.mjs
 - `desk_ws63_glue`：`authorize_on_ui` 回调现在为必填，处理队列命令前再核验连接代际与设备所有权，防止排队时合法、执行时已撤销授权的写入。
 - `test_nv_glue.c`：模拟 SLE 更新 → NV 双槽写入 → LVGL 显示 → 业务 ACK → 冷启动恢复。
 - 对接 `BUILD.gn` 时需增加 `desk_nv_store.c`；实际 Flash 擦除块大小和 SDK 编程对齐要求必须单独验证。
+
+
+## 九、真实 LVGL 双版本 CI 与可审查 GN Overlay
+
+原先只使用 LVGL stub 的测试，现在额外以**真正的 LVGL 8.3.11 与 LVGL 9.3.0 官方源码**编译并在无窗口的 Linux 显示驱动上执行原屏 Desk View 测试。两版源码均由 GitHub Actions 使用固定 commit 检出。版本差异已在 `desk_view_lvgl.c` 用条件编译处理。
+
+完整验收范围见 [LVGL_SDK_COMPAT.md](LVGL_SDK_COMPAT.md)：成功只证明宿主机 LVGL API 和基本布局兼容，仍未确认小鸿上游固件实际版本、中文字库及 ST7789 刷新效果。
+
+为了降低往真实 OpenHarmony 7.0 WS63 源码里植入的人工操作，可先生成**无侵入的构建暂存目录**：
+
+```bash
+# 当前 XiaohongDeskCard 源码仓库的根目录执行
+python3 tools/ws63_overlay.py --output build/ws63-overlay
+
+# 有上游 OpenHarmony 源码树时，先核查布局（不触碰板卡）
+python3 tools/ws63_preflight.py --root /path/to/openharmony --json
+```
+
+暂存结果包含 `src/deskcard/` 下 8 个 C 文件、`src/deskcard/include/` 下 8 个头文件、`BUILD.gn.fragment` 与 `manifest.json`（逐文件 SHA-256）。它会拒绝覆盖既有暂存目录，且**从不自动修改上游 `BUILD.gn`**。
+
+人工审查后，才将对应源文件放入 `vendor/atomgit/xiaohong/xiaohong/src/deskcard/`，在 `static_library("xiaohong")` 中加入基础核心文件，并把 LVGL 显示文件放入已有的 `if (config_lvgl_enable)` 条件块。随后还必须补真实 OS/NV/BLE/SLE/Wi-Fi 板级适配，才能尝试 `hb build`。
+
+这是准备 SDK 编译的产物，**并不是可直接刷机的固件**。
