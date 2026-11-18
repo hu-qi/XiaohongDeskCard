@@ -1,23 +1,39 @@
 import { ssap } from '@kit.NearLinkKit';
 import { DeskWireFrame } from './DeskWireFrame';
+import { DeskAckWaiter } from './DeskAckWaiter';
+import { DeskRadioAck } from './DeskAckFrame';
 import { isNearLinkAvailable } from './NearLinkCapability';
 
 /**
- * NearLink SSAP client write adapter using @kit.NearLinkKit (API 13+).
+ * SLE SSAP client prototype, for HarmonyOS @kit.NearLinkKit (API 13+).
  *
- * Must use UUIDs advertised by the future WS63 SSAP Server.
- * Success of sendFrame means write promises completed, NOT business ACK.
- * Business ACK/notify and device authorization still require WS63 work.
+ * The WS63 server must advertise a writable Desk property and an ACK notify
+ * property. ACK is required to confirm Desk Core processing, not merely
+ * SSAP transport success. Service/Property UUID and hardware integration
+ * remain unvalidated.
  */
 export class SleSsapLink {
   private client: ssap.Client | null = null;
   private serviceUuid: string;
   private writeUuid: string;
+  private ackUuid: string;
   private maxWriteBytes: number;
+  private ackWaiter: DeskAckWaiter = new DeskAckWaiter();
+  private notificationReady: boolean = false;
 
-  constructor(serviceUuid: string, writeUuid: string, maxWriteBytes: number = 64) {
+  private onPropertyChanged = (changed: ssap.Property): void => {
+    if (changed.serviceUuid.toLowerCase() !== this.serviceUuid.toLowerCase() ||
+        changed.propertyUuid.toLowerCase() !== this.ackUuid.toLowerCase()) {
+      return;
+    }
+    this.ackWaiter.accept(new Uint8Array(changed.value));
+  };
+
+  constructor(serviceUuid: string, writeUuid: string, ackUuid: string,
+              maxWriteBytes: number = 64) {
     this.serviceUuid = serviceUuid;
     this.writeUuid = writeUuid;
+    this.ackUuid = ackUuid;
     this.maxWriteBytes = maxWriteBytes;
   }
 
@@ -31,17 +47,28 @@ export class SleSsapLink {
     try {
       await client.connect();
       const services: Array<ssap.Service> = await client.getServices();
-      let found: boolean = false;
+      let writeFound: boolean = false;
+      let ackProperty: ssap.Property | null = null;
       for (let i: number = 0; i < services.length; i++) {
         if (services[i].serviceUuid.toLowerCase() !== this.serviceUuid.toLowerCase()) {
           continue;
         }
         for (let j: number = 0; j < services[i].properties.length; j++) {
-          if (services[i].properties[j].propertyUuid.toLowerCase() ===
-              this.writeUuid.toLowerCase()) found = true;
+          const prop: ssap.Property = services[i].properties[j];
+          if (prop.propertyUuid.toLowerCase() === this.writeUuid.toLowerCase()) {
+            writeFound = true;
+          }
+          if (prop.propertyUuid.toLowerCase() === this.ackUuid.toLowerCase()) {
+            ackProperty = prop;
+          }
         }
       }
-      if (!found) throw new Error('Desk SLE write property not found');
+      if (!writeFound || ackProperty === null) {
+        throw new Error('Desk SLE command/ACK property not found');
+      }
+      client.on('propertyChange', this.onPropertyChanged);
+      await client.setPropertyNotification(ackProperty, true);
+      this.notificationReady = true;
     } catch (err) {
       await this.close();
       throw err;
@@ -50,8 +77,9 @@ export class SleSsapLink {
 
   async sendFrame(frame: Uint8Array): Promise<void> {
     const client: ssap.Client | null = this.client;
-    if (client === null) throw new Error('SLE SSAP not connected');
-    // maxWriteBytes must be revised after MTU negotiation.
+    if (client === null || !this.notificationReady) {
+      throw new Error('SLE command/ACK service not ready');
+    }
     const packets: Array<Uint8Array> = DeskWireFrame.packets(frame, this.maxWriteBytes);
     for (let i: number = 0; i < packets.length; i++) {
       const property: ssap.Property = {
@@ -63,11 +91,27 @@ export class SleSsapLink {
     }
   }
 
+  async sendFrameAwaitAck(frame: Uint8Array, requestId: number,
+                          timeoutMs: number = 15000): Promise<DeskRadioAck> {
+    if (!this.notificationReady) throw new Error('SLE ACK notification not subscribed');
+    const pending: Promise<DeskRadioAck> = this.ackWaiter.wait(requestId, timeoutMs);
+    try {
+      await this.sendFrame(frame);
+      return await pending;
+    } catch (err) {
+      this.ackWaiter.fail('SLE transfer failed or ACK missing: ' + String(err));
+      throw err;
+    }
+  }
+
   async close(): Promise<void> {
+    this.ackWaiter.fail('SLE disconnected');
+    this.notificationReady = false;
     const client: ssap.Client | null = this.client;
     this.client = null;
     if (client !== null) {
       try {
+        client.off('propertyChange', this.onPropertyChanged);
         await client.disconnect();
       } finally {
         client.close();
