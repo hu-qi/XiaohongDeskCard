@@ -6,7 +6,8 @@ add_library(desk_core STATIC
     firmware/core/src/desk_wire.c
     firmware/core/src/desk_packet.c
     firmware/core/src/desk_dispatcher.c
-    firmware/core/src/desk_radio_ingress.c)
+    firmware/core/src/desk_radio_ingress.c
+    firmware/core/src/desk_nv_store.c)
 target_include_directories(desk_core PUBLIC firmware/core/include)
 set_target_properties(desk_core PROPERTIES
     C_STANDARD 99 C_STANDARD_REQUIRED YES POSITION_INDEPENDENT_CODE ON)
@@ -38,6 +39,10 @@ add_test(NAME desk_dispatcher_tests COMMAND test_dispatcher)
 add_executable(test_radio_ingress tests/test_radio_ingress.c)
 target_link_libraries(test_radio_ingress PRIVATE desk_core)
 add_test(NAME desk_radio_ingress_tests COMMAND test_radio_ingress)
+
+add_executable(test_nv_store tests/test_nv_store.c)
+target_link_libraries(test_nv_store PRIVATE desk_core)
+add_test(NAME desk_nv_store_tests COMMAND test_nv_store)
 
 add_executable(test_packet_fuzz tests/test_packet_fuzz.c)
 target_link_libraries(test_packet_fuzz PRIVATE desk_core)
