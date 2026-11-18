@@ -17,6 +17,13 @@ add_subdirectory("${DESK_LVGL_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/vendor_l
 # The LVGL v8 custom.cmake normally locates lv_conf.h relative to its tree.
 # The explicit include also supports the nested GitHub Actions checkout path.
 target_include_directories(lvgl PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+# LVGL 9.3 upstream glob includes ARM Helium *.S files even for x86_64.
+# They are unavailable on the GitHub Linux host and are disabled by
+# LVGL's software draw config anyway. Exclude machine-specific assembly
+# from this *host-only* compatibility test, not from WS63 firmware.
+get_target_property(_desk_lvgl_sources lvgl SOURCES)
+list(FILTER _desk_lvgl_sources EXCLUDE REGEX "\\.S$")
+set_property(TARGET lvgl PROPERTY SOURCES "${_desk_lvgl_sources}")
 
 add_executable(test_lvgl_real
     test_lvgl_real.c
