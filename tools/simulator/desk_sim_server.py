@@ -88,7 +88,7 @@ class DeskSimulator:
         self.lib.desk_sim_apply_set.restype = ctypes.c_int
         self.lib.desk_sim_apply_fragmented.argtypes = [
             ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t,
-            ctypes.c_size_t, ctypes.c_int
+            ctypes.c_size_t, ctypes.c_int, ctypes.c_int
         ]
         self.lib.desk_sim_apply_fragmented.restype = ctypes.c_int
         self.lib.desk_sim_encode_ack.argtypes = [
@@ -129,7 +129,8 @@ class DeskSimulator:
                 # Simulate smaller BLE chunks, larger SLE chunks; NOT radio transport.
                 fragment_bytes = 20 if transport == "ble" else 64
                 result = self.lib.desk_sim_apply_fragmented(
-                    array, len(frame), fragment_bytes, int(authorized))
+                    array, len(frame), fragment_bytes,
+                    1 if transport == "ble" else 2, int(authorized))
             else:
                 raise ValueError("unknown mock transport")
             state = self._snapshot_locked()
