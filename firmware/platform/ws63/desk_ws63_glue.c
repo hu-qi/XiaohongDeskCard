@@ -44,11 +44,18 @@ static void port_ack(void *ctx, desk_channel_t channel, uint32_t peer,
     port->callbacks.enqueue_ack(port->callbacks.context, channel, peer, ack);
 }
 
+static bool port_recheck(void *ctx, desk_channel_t channel, uint32_t peer)
+{
+    desk_ws63_port_t *port = (desk_ws63_port_t *)ctx;
+    return port->callbacks.authorize_on_ui(port->callbacks.context, channel, peer);
+}
+
 int desk_ws63_port_init(desk_ws63_port_t *port, desk_ws63_callbacks_t callbacks,
                         lv_obj_t *parent)
 {
     if (port == NULL || callbacks.load == NULL || callbacks.save == NULL ||
         callbacks.post_display_event == NULL || callbacks.enqueue_ack == NULL ||
+        callbacks.authorize_on_ui == NULL ||
         ((callbacks.lock == NULL) != (callbacks.unlock == NULL)))
         return 0;
     memset(port, 0, sizeof(*port));
@@ -68,6 +75,7 @@ int desk_ws63_port_init(desk_ws63_port_t *port, desk_ws63_callbacks_t callbacks,
     dispatch_hooks.notify_ui = port_notify;
     dispatch_hooks.on_result = port_ack;
     dispatch_hooks.context = port;
+    dispatch_hooks.authorize_on_ui = port_recheck;
     if (!desk_dispatcher_init(&port->dispatcher, &port->core, dispatch_hooks)) {
         desk_lvgl_view_destroy(&port->view);
         return 0;
