@@ -3,7 +3,8 @@ project(XiaohongDeskCardCore LANGUAGES C)
 
 add_library(desk_core STATIC
     firmware/core/src/desk_core.c
-    firmware/core/src/desk_wire.c)
+    firmware/core/src/desk_wire.c
+    firmware/core/src/desk_packet.c)
 target_include_directories(desk_core PUBLIC firmware/core/include)
 set_target_properties(desk_core PROPERTIES
     C_STANDARD 99 C_STANDARD_REQUIRED YES POSITION_INDEPENDENT_CODE ON)
@@ -23,6 +24,10 @@ enable_testing()
 add_executable(test_core tests/test_core.c)
 target_link_libraries(test_core PRIVATE desk_core)
 add_test(NAME desk_core_tests COMMAND test_core)
+
+add_executable(test_packet tests/test_packet.c)
+target_link_libraries(test_packet PRIVATE desk_core)
+add_test(NAME desk_packet_tests COMMAND test_packet)
 
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
