@@ -12,6 +12,9 @@
 - [x] 16-byte business ACK、CRC32 与请求 ID 关联，宿主机自动化测试
 - [x] HarmonyOS Stage 工程、编辑 UI、BLE/SLE 扫描和 SDK 写入源码初稿
 - [x] 三模入口统一有界命令队列、LVGL 240×240 界面与 SDK 无关 glue，在宿主机模拟编译/测试通过
+- [x] BLE/SLE 原始分包共用 Radio Ingress，绑定授权状态、断连清理、业务 ACK 与连接 token 关联均通过主机测试
+- [x] 浏览器 BLE/SLE 模拟入口经过真实 C99 Radio Ingress、Dispatcher 和 ACK 完整路径
+- [x] 原始无线数据加入确定性错误输入压力测试，并纳入 C UBSan 自动检查（非安全认证）
 - [x] 小鸿 OpenHarmony 源码布局离线预检查器及测试（不等于执行真实 SDK 构建）
 - [ ] DevEco Studio / Hvigor **真实构建通过 HAP**（GitHub 结构检查不等于 HAP 编译）
 - [x] 软件侧校验分包恢复、CRC、超时及预写入安全回退策略（Node 22 + C99 测试；非无线实测）
