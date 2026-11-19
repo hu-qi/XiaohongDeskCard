@@ -230,3 +230,15 @@ WS63 待审查源码包更新为 **12 C + 12 H**，包含 CMSIS 事件适配层�
 - [后续 WS63 SDK 编译 Gate](https://github.com/hu-qi/XiaohongDeskCard/issues/7)
 
 **下一阶段仍需在小鸿 SDK 中实现并编译真实 BLE GATT、SLE SSAP、Wi-Fi HTTP、Flash/NV 与原屏 LVGL 服务。手机启动成功不能替代板端联调。**
+
+
+## Gate B 最新进度：GN 安全集成与全量实库编译
+
+已完成 [GN 上游集成指南](docs/WS63_GN_INSTALL.md) 与 `tools/ws63_gn_integrate.py`：
+
+- 首次真正有 WS63 SDK 时，可根据完整 vendor commit SHA 检查 `static_library("xiaohong")` 和 `config_lvgl_enable`，默认**只读展示 diff**。
+- 手动审核后显式使用 `--apply`，才会将完整 12 C + 12 H 复制到上游 `src/deskcard` 并原子修改 `BUILD.gn`；有未提交的上游改动、源码包 SHA-256 不匹配或 GN 结构不符合预期都会拒绝。
+- CI 额外以实际 **LVGL 8.3.11 和 LVGL 9.3.0 + ARM CMSIS 官方头文件**分别编译整个 12 C 软件包并执行 GUI/NV/GET/ACK 全栈宿主机集成测试。
+
+**尚无 WS63 真实 SDK `hb build`、GATT/SSAP/HTTP 板级服务或可烧录产物。** App 已由用户在 HarmonyOS 7 真机独立启动过，但无需现在再次运行、烧录或联调。
+
