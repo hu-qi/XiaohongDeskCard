@@ -129,3 +129,14 @@
 - [x] 断连后定向清除该连接剩余回复，不误删其他连接或其他无线模式使用的同号 token
 - [x] 多任务乱序、容量上限、环形队列回绕与空闲消息清零测试
 - [ ] 真实 WS63 SDK 的 BLE/SLE/HTTP worker 调用 `desk_reply_take_for`，并在实际发送前复核当前 generation（需要 SDK 编译；尚未开始）
+
+
+### 最新 Gate A/B 进度：CMSIS 接口核验与 HAP 首次编译
+
+- [x] 真实 CMSIS-RTOS2 v2.3.0 头文件下编译 `desk_ws63_cmsis.c` 成功（API 语法检查，不是 WS63 SDK 链接）
+- [x] 4 字节消息大小检查、非阻塞队列投递、队列满时 LVGL 轮询恢复：宿主机模拟测试通过
+- [x] SDK 源码暂存包包含 12 C + 12 H 及 SHA-256 清单
+- [x] DevEco Studio 首次 **只编译不运行** 操作及回报日志清单已编写，见 [HAP_BUILD_HANDOFF.md](HAP_BUILD_HANDOFF.md)
+- [ ] **Gate A 待执行**：在真实 DevEco + HarmonyOS SDK 6.0.2(22) 构建 HAP（需用户/可用编译环境执行；本端无 DevEco）
+- [ ] **Gate B 待执行**：真实小鸿 SDK 的 GN、CMSIS mutex/队列/事件、Flash 与 GATT/SSAP/HTTP 集成后才能运行 `hb build`
+- [ ] **Gate C 待执行**：HarmonyOS 7 运行 App 和小鸿 AI 真机联调（还没有可验证的编译产物，不应提前进行）
