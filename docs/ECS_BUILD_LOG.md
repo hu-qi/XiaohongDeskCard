@@ -28,7 +28,7 @@
 2. **`The flavor does not match the image`(Ecs.0005)**:cn-north-4 全部公共 Ubuntu 22.04 x86 镜像是 `virtual_env_type=FusionCompute`;m7/ac8 等 KVM flavor 不兼容。2c16G x86 flavor 全部 abandon 停售。可行组合:**t7.xlarge.4(4c16G, FusionCompute 兼容)+ 原版 Ubuntu 22.04 server 64bit 镜像(89ac6e18)**。
 3. **metadata admin_pass 403**:IAM 策略禁止写 admin_pass 系统键;密码登录方式不可用,改用已有 SSH 密钥对 `xhb-access-key`(指纹匹配本地 `~/.ssh/id_rsa`)。
 4. **t7.xlarge.4 状态 abandon 但可创建**(存量 SKU),实例已 ACTIVE。
-5. DNS chattr +i 在此内核不支持(未影响,DHCP 未覆盖)。
+5. DNS chattr +i 在此内核不支持;DHCP 会在续租时**覆盖** `/etc/resolv.conf` 为公网 DNS(8.8.8.8),导致内网解析失败、prebuilts 下载中途 Name resolution 报错。修复:向 `/etc/dhcp/dhclient.conf` 追加 `supersede domain-name-servers 100.125.1.250, 100.125.21.250;`(chattr +i 的锁在 t7 内核上无效,这是本环境可行的持久化方式)。
 6. apt 首轮被 SSH 断连打断 → `dpkg --configure -a` 修复后重跑成功。
 7. repo launcher 需 `export REPO_URL=https://mirrors.tuna.tsinghua.edu.cn/git/git-repo`。
 
