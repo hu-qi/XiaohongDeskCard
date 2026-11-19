@@ -70,6 +70,19 @@ static void ack(void *ctx, desk_channel_t channel, uint32_t peer,
     rig->acknowledgements++;
 }
 
+static void status_reply(void *ctx, desk_channel_t channel, uint32_t peer,
+                         desk_result_t result, const desk_http_state_t *snapshot)
+{
+    rig_t *rig = (rig_t *)ctx;
+    assert(channel == DESK_CHANNEL_SLE && peer == 77u);
+    if (result == DESK_OK) {
+        assert(snapshot != NULL);
+        assert(snapshot->revision == rig->nv.current_revision);
+    } else {
+        assert(result == DESK_UNAUTHORIZED && snapshot == NULL);
+    }
+}
+
 static bool check_auth(void *ctx, desk_channel_t channel, uint32_t peer)
 {
     rig_t *rig = (rig_t *)ctx;
@@ -91,6 +104,7 @@ int main(void)
     cb.enqueue_ack = ack;
     cb.context = &rig;
     cb.authorize_on_ui = check_auth;
+    cb.enqueue_status = status_reply;
 
     desk_ws63_port_t port = {0};
     assert(desk_ws63_port_init(&port, cb, NULL));
