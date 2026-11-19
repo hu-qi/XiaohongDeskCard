@@ -186,7 +186,8 @@ int desk_sim_apply_json(const uint8_t *body, size_t size, int authorized)
         return DESK_BAD_INPUT;
 
     desk_reply_item_t reply = {0};
-    if (!desk_reply_pop(&g_reply_mailbox, &reply) ||
+    if (!desk_reply_take_for(&g_reply_mailbox,
+                             DESK_CHANNEL_WIFI, peer_token, &reply) ||
         reply.kind != DESK_REPLY_ACK ||
         reply.channel != DESK_CHANNEL_WIFI ||
         reply.peer_token != peer_token)
@@ -282,7 +283,8 @@ int desk_sim_apply_fragmented(const uint8_t *bytes, size_t size,
     }
 
     desk_reply_item_t reply = {0};
-    if (!desk_reply_pop(&g_reply_mailbox, &reply) ||
+    if (!desk_reply_take_for(&g_reply_mailbox,
+                             (desk_channel_t)channel, peer_token, &reply) ||
         reply.kind != DESK_REPLY_ACK ||
         reply.channel != (desk_channel_t)channel ||
         reply.peer_token != peer_token) {
