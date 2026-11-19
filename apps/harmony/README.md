@@ -20,3 +20,10 @@
 页面上的 **BLE Mock / SLE Mock** 是明确标注的纯 ArkTS 模拟按钮；真正的 GATT / SSAP 客户端还需要服务 UUID、设备端广播和配对授权等条件，尚未接入 UI。
 
 特别注意：首版用 `@kit.NearLinkKit`，它的相关接口自 API 13 起即有提供，**不要求为第一版直接切换到 API 26**。请参阅 [官方 V13 SSAP](https://developer.huawei.com/consumer/cn/doc/harmonyos-references-V13/nearlink-ssap-V13/)。
+
+
+## 首次真正构建：Gate A（现在可执行）
+
+请按 [HAP 编译交接指南](../../docs/HAP_BUILD_HANDOFF.md) 在 DevEco Studio 中仅 **Sync → Build Hap(s)**。目标是获取 DevEco/SDK 版本、源码 SHA 以及真实 ArkTS 编译日志。**暂不运行、不安装到手机、不访问真实桌牌，也不需要固件编译**。
+
+本机 GitHub CI 的 Stage 检查只是文件结构与资源检查，不能代替这一 Gate。
