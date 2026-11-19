@@ -8,6 +8,7 @@
 #include "desk_dispatcher.h"
 #include "desk_radio_ingress.h"
 #include "desk_wifi_ingress.h"
+#include "desk_reply_mailbox.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -30,21 +31,40 @@ static int g_initialized;
 static desk_dispatcher_t g_dispatcher;
 static uint32_t g_session_counter;
 
-static struct {
-    int valid;
-    desk_channel_t channel;
-    uint32_t peer_token;
-    uint8_t ack[DESK_ACK_SIZE];
-} g_transport_reply;
+static desk_reply_mailbox_t g_reply_mailbox;
+static int g_reply_drop;
 
 static void on_radio_reply(void *context, desk_channel_t channel,
                            uint32_t peer_token, const uint8_t ack[DESK_ACK_SIZE])
 {
     (void)context;
-    g_transport_reply.valid = 1;
-    g_transport_reply.channel = channel;
-    g_transport_reply.peer_token = peer_token;
-    memcpy(g_transport_reply.ack, ack, DESK_ACK_SIZE);
+    if (!desk_reply_push_ack(&g_reply_mailbox, channel, peer_token, ack))
+        g_reply_drop = 1;
+}
+
+static bool on_read_display(void *context, desk_content_t *out)
+{
+    (void)context;
+    if (out == NULL) return false;
+    *out = g_displayed;
+    return desk_content_valid(out);
+}
+
+static void on_status_reply(void *context, desk_channel_t channel,
+                            uint32_t peer_token, desk_result_t result,
+                            const desk_http_state_t *state)
+{
+    (void)context;
+    if (!desk_reply_push_status(&g_reply_mailbox, channel, peer_token,
+                                result, state))
+        g_reply_drop = 1;
+}
+
+static uint32_t next_token(void)
+{
+    g_session_counter++;
+    if (g_session_counter == 0u) g_session_counter = 1u;
+    return g_session_counter;
 }
 
 
@@ -109,11 +129,16 @@ int desk_sim_init(const char *path)
     memset(&g_displayed, 0, sizeof(g_displayed));
     desk_hooks_t hooks = {load_snapshot, save_snapshot, render_screen, NULL};
     desk_core_init(&g_core, hooks);
+    desk_reply_hooks_t reply_hooks = {0};
+    if (!desk_reply_init(&g_reply_mailbox, reply_hooks))
+        return 0;
     desk_dispatch_hooks_t dispatch_hooks = {0};
     dispatch_hooks.on_result = on_radio_reply;
+    dispatch_hooks.on_status = on_status_reply;
+    dispatch_hooks.read_display_on_ui = on_read_display;
     if (!desk_dispatcher_init(&g_dispatcher, &g_core, dispatch_hooks))
         return 0;
-    memset(&g_transport_reply, 0, sizeof(g_transport_reply));
+    g_reply_drop = 0;
     g_initialized = 1;
     return desk_core_repaint(&g_core) == DESK_OK;
 }
@@ -148,25 +173,27 @@ int desk_sim_apply_set(uint32_t request_id, uint32_t expected_revision,
 int desk_sim_apply_json(const uint8_t *body, size_t size, int authorized)
 {
     if (!g_initialized || body == NULL || size == 0u) return DESK_BAD_INPUT;
-    g_session_counter++;
-    if (g_session_counter == 0u) g_session_counter = 1u;
-    const uint32_t peer_token = g_session_counter;
+    const uint32_t peer_token = next_token();
     uint32_t request_id = 0u;
-    memset(&g_transport_reply, 0, sizeof(g_transport_reply));
+    g_reply_drop = 0;
 
     const desk_wifi_result_t status = desk_wifi_submit_put(
         &g_dispatcher, peer_token, authorized != 0, body, size, &request_id);
     if (status == DESK_WIFI_UNAUTHORIZED) return DESK_UNAUTHORIZED;
     if (status != DESK_WIFI_QUEUED) return DESK_BAD_INPUT;
 
-    if (!desk_dispatcher_process_one(&g_dispatcher) ||
-        !g_transport_reply.valid ||
-        g_transport_reply.channel != DESK_CHANNEL_WIFI ||
-        g_transport_reply.peer_token != peer_token)
+    if (!desk_dispatcher_process_one(&g_dispatcher) || g_reply_drop)
+        return DESK_BAD_INPUT;
+
+    desk_reply_item_t reply = {0};
+    if (!desk_reply_pop(&g_reply_mailbox, &reply) ||
+        reply.kind != DESK_REPLY_ACK ||
+        reply.channel != DESK_CHANNEL_WIFI ||
+        reply.peer_token != peer_token)
         return DESK_BAD_INPUT;
 
     desk_ack_t ack = {0};
-    if (!desk_wifi_match_ack(request_id, g_transport_reply.ack,
+    if (!desk_wifi_match_ack(request_id, reply.payload.ack,
                              DESK_ACK_SIZE, &ack))
         return DESK_BAD_INPUT;
     return (int)ack.result;
@@ -198,14 +225,12 @@ int desk_sim_apply_fragmented(const uint8_t *bytes, size_t size,
         (channel != DESK_CHANNEL_BLE && channel != DESK_CHANNEL_SLE))
         return DESK_BAD_INPUT;
 
-    g_session_counter++;
-    if (g_session_counter == 0u) g_session_counter = 1u;
-    const uint32_t peer_token = g_session_counter;
+    const uint32_t peer_token = next_token();
     desk_radio_link_t link = {0};
     if (!desk_radio_link_open(&link, &g_dispatcher, (desk_channel_t)channel,
                               peer_token)) return DESK_BAD_INPUT;
     desk_radio_link_set_authorized(&link, authorized != 0);
-    memset(&g_transport_reply, 0, sizeof(g_transport_reply));
+    g_reply_drop = 0;
 
     uint8_t begin[DESK_PACKET_BEGIN_SIZE] = {DESK_PACKET_BEGIN};
     begin[1] = (uint8_t)size;
@@ -250,19 +275,26 @@ int desk_sim_apply_fragmented(const uint8_t *bytes, size_t size,
 
     const uint8_t commit = DESK_PACKET_COMMIT;
     status = desk_radio_link_receive(&link, &commit, 1u, now_ms++, timeout_ms);
-    if (status != DESK_RADIO_QUEUED || !desk_dispatcher_process_one(&g_dispatcher) ||
-        !g_transport_reply.valid ||
-        g_transport_reply.channel != (desk_channel_t)channel ||
-        g_transport_reply.peer_token != peer_token) {
+    if (status != DESK_RADIO_QUEUED ||
+        !desk_dispatcher_process_one(&g_dispatcher) || g_reply_drop) {
+        desk_radio_link_close(&link);
+        return DESK_BAD_INPUT;
+    }
+
+    desk_reply_item_t reply = {0};
+    if (!desk_reply_pop(&g_reply_mailbox, &reply) ||
+        reply.kind != DESK_REPLY_ACK ||
+        reply.channel != (desk_channel_t)channel ||
+        reply.peer_token != peer_token) {
         desk_radio_link_close(&link);
         return DESK_BAD_INPUT;
     }
 
     desk_ack_t ack = {0};
     const int good =
-        desk_wire_decode_ack(g_transport_reply.ack, DESK_ACK_SIZE, &ack) == DESK_WIRE_OK &&
+        desk_wire_decode_ack(reply.payload.ack, DESK_ACK_SIZE, &ack) == DESK_WIRE_OK &&
         desk_radio_link_ack_complete(&link, peer_token,
-                                     g_transport_reply.ack, DESK_ACK_SIZE);
+                                     reply.payload.ack, DESK_ACK_SIZE);
     desk_radio_link_close(&link);
     return good ? (int)ack.result : DESK_BAD_INPUT;
 }
@@ -272,9 +304,25 @@ int desk_sim_snapshot(desk_content_t *content, desk_content_t *displayed,
 {
     if (!g_initialized || content == NULL || displayed == NULL || revision == NULL)
         return 0;
-    *content = g_core.content;
-    *displayed = g_displayed;
-    *revision = g_core.revision;
+    /* Simulator GET now uses the same UI FIFO and nonblocking reply
+     * mailbox as real production adapters will use. Localhost preview
+     * intentionally permits anonymous read; never copy that to WS63. */
+    const uint32_t peer_token = next_token();
+    if (desk_wifi_submit_get(&g_dispatcher, peer_token, true) != DESK_WIFI_QUEUED)
+        return 0;
+    g_reply_drop = 0;
+    if (!desk_dispatcher_process_one(&g_dispatcher) || g_reply_drop)
+        return 0;
+    desk_reply_item_t reply = {0};
+    if (!desk_reply_pop(&g_reply_mailbox, &reply) ||
+        reply.kind != DESK_REPLY_STATUS ||
+        reply.channel != DESK_CHANNEL_WIFI ||
+        reply.peer_token != peer_token ||
+        reply.result != DESK_OK || !reply.has_state)
+        return 0;
+    *content = reply.payload.state.content;
+    *displayed = reply.payload.state.display;
+    *revision = reply.payload.state.revision;
     return 1;
 }
 
