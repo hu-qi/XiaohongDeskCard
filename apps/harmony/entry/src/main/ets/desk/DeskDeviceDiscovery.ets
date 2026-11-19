@@ -5,7 +5,7 @@ import { DeskServiceIds } from './DeskServiceIds';
 import { isNearLinkAvailable } from './NearLinkCapability';
 
 /**
- * Device discovery adapters for HarmonyOS SDK 22 (compile not yet verified).
+ * Device discovery adapters for HarmonyOS SDK 22 (compiled and installed with SDK 6.0.2(22) after local fixes).
  * Permissions must be granted by the host UI before starting scans.
  * Scan results do NOT prove device pairing, ownership or Desk service support.
  */
@@ -61,7 +61,7 @@ export class DeskDeviceDiscovery {
       this.bleScanning = true;
     } catch (err) {
       ble.off('BLEDeviceFind', this.bleFound);
-      throw err;
+      throw new Error(String(err));
     }
   }
 
@@ -87,7 +87,7 @@ export class DeskDeviceDiscovery {
       this.sleScanning = true;
     } catch (err) {
       scan.off('deviceFound', this.sleFound);
-      throw err;
+      throw new Error(String(err));
     }
   }
 
