@@ -62,10 +62,25 @@ jobs:
           ref: ${{ matrix.commit }}
           path: external/lvgl
           persist-credentials: false
-      - name: Configure against actual LVGL library
-        run: cmake -S tests/lvgl_real -B build-real-lvgl -DDESK_LVGL_SOURCE_DIR="${GITHUB_WORKSPACE}/external/lvgl" -DCMAKE_BUILD_TYPE=Debug
-      - name: Compile actual LVGL and Desk 240x240 View
-        run: cmake --build build-real-lvgl --target test_lvgl_real --parallel 4
+      - name: Fetch pinned official CMSIS headers for combined stack
+        uses: actions/checkout@v4
+        with:
+          repository: ARM-software/CMSIS_6
+          ref: 6f0a58d01aa9bd2feba212097f9afe7acd991d52
+          path: external/cmsis
+          persist-credentials: false
+          sparse-checkout: |
+            CMSIS/RTOS2/Include
+            CMSIS/Core/Include
+      - name: Configure combined real LVGL and CMSIS API stack
+        run: |
+          cmake -S tests/lvgl_real -B build-real-lvgl \
+            -DDESK_LVGL_SOURCE_DIR="${GITHUB_WORKSPACE}/external/lvgl" \
+            -DDESK_CMSIS_HEADER_DIR="${GITHUB_WORKSPACE}/external/cmsis/CMSIS/RTOS2/Include" \
+            -DDESK_CMSIS_CORE_HEADER_DIR="${GITHUB_WORKSPACE}/external/cmsis/CMSIS/Core/Include" \
+            -DCMAKE_BUILD_TYPE=Debug
+      - name: Compile original-screen Desk View and complete 12-C firmware core
+        run: cmake --build build-real-lvgl --target test_lvgl_real test_ws63_real_stack --parallel 4
       - name: Execute real LVGL headless integration test
         run: ctest --test-dir build-real-lvgl --output-on-failure
 
