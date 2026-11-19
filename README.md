@@ -2,7 +2,7 @@
 
 基于 **小鸿 AI（HiSilicon WS63 / OpenHarmony LiteOS）** 原装 **240×240 TFT** 的开源智能电子桌牌项目。
 
-> 当前状态：**架构与验证基线（尚未形成可烧录固件）**。首个目标是无需外接电子纸，在小鸿原装屏幕上验证 **BLE GATT / 星闪 SLE / Wi‑Fi HTTP 三种链路均能更新同一个桌牌页面**。
+> **最新状态（2026-11-19）**：开发者已在 DevEco Studio 以 HarmonyOS SDK 6.0.2(22) 完成 Debug HAP 构建、签名、安装并在 HarmonyOS 7 真机启动；**WS63 固件尚未完成实际 SDK 构建，BLE/SLE/Wi-Fi 与板卡通信尚未实测**。调试签名仅保留本地，不提交密码或证书路径。详见 [Gate A 实测记录](docs/HAP_GATE_A_REPORT.md) 与 [签名安全说明](docs/HARMONY_SIGNING_SECURITY.md)。
 
 ## 首版目标
 
@@ -88,7 +88,7 @@ curl -X PUT http://127.0.0.1:8765/api/v1/desk/content \
 | BLE/SLE 分片与完整帧交付到 Desk Core | 已实现模拟路径 |
 | 真正的 BLE GATT / SLE SSAP 无线通讯 | 尚未实现 |
 | LVGL / ST7789 实机绘制、WS63 SDK 构建 | 尚未实现 |
-| HarmonyOS Stage App 工程及 ArkUI 编辑页 | 已提交源码；未在 DevEco 编译 |
+| HarmonyOS Stage App 工程及 ArkUI 编辑页 | **用户本机 DevEco Debug HAP 编译、真机安装启动已通过**；仍需专项链路功能测试 |
 | BLE GATT / SLE SSAP 原生客户端 | SDK 适配原型已提交；未接入实际 WS63 服务 |
 
 **硬件实测放最后，但 SDK 编译检查应提前。** 详细说明见 [验证矩阵](docs/VALIDATION.md) 与 [桌面协议](docs/WIRE_V1.md)。
@@ -173,7 +173,7 @@ python3 tools/ws63_overlay.py --output build/ws63-overlay
 
 [真实 LVGL 8/9 验证说明](docs/LVGL_SDK_COMPAT.md) · [SDK 集成与 Overlay 指南](docs/WS63_INTEGRATION.md)。
 
-**尚未完成 OpenHarmony WS63 `hb build` 与 DevEco HAP 编译；用户目前不需要进行真机操作。**
+**仍未完成 WS63 SDK `hb build`；HarmonyOS App 已成功完成首次 DevEco 编译并启动。无需现在烧录 WS63 或进行三模联调。**
 
 
 ## 设备端 Wi-Fi HTTP 统一业务链路（软件基线）
@@ -184,7 +184,7 @@ python3 tools/ws63_overlay.py --output build/ws63-overlay
 
 [Wi-Fi HTTP 接口与安全要求](docs/WIFI_HTTP_INTEGRATION.md) · [协议 v1](docs/PROTOCOL.md)。
 
-**依然没有 WS63 实际 HTTP Server、DevEco HAP 编译或实机结果。现在不需要操作小鸿 AI / HarmonyOS 7 手机。**
+**仍没有 WS63 实际 HTTP Server 或板卡联调结果；App 已在 HarmonyOS 7 真机启动，目前不需要再次运行或烧录。**
 
 
 ## 2026-11-19 · UI 状态快照与三模响应 mailbox
@@ -195,7 +195,7 @@ python3 tools/ws63_overlay.py --output build/ws63-overlay
 
 [UI GET/SET 与回传队列规范](docs/UI_MESSAGE_BRIDGE.md) · [SDK 编译 Gate](https://github.com/hu-qi/XiaohongDeskCard/issues/7)。
 
-**仍未进行真实 WS63 SDK 固件构建或 HarmonyOS HAP 编译，尚不能要求用户烧录或运行 App。**
+**仍未进行真实 WS63 SDK 固件构建；HarmonyOS HAP 首次编译及运行已由用户验证。**
 
 
 ## 2026-11-19 · 三模回传连接隔离
@@ -218,4 +218,15 @@ WS63 待审查源码包更新为 **12 C + 12 H**，包含 CMSIS 事件适配层�
 - [CMSIS 与小鸿 LvglTask 接入规范](docs/WS63_CMSIS_BRIDGE.md)
 - [首次 DevEco HAP 仅编译 Gate A 指南](docs/HAP_BUILD_HANDOFF.md)
 
-**下一步需要具备 DevEco Studio 环境的人进行首次 HAP 编译诊断**，不运行 App、不安装到 HarmonyOS 7 手机、更不烧录小鸿。编译是否通过目前未知。
+**2026-11-19 开发者已完成首次 DevEco Debug HAP 编译和手机运行。下一关键工作是 WS63 SDK 固件构建与三模板端服务端集成。**
+
+
+## Gate A 实际完成：HarmonyOS 7 手机运行
+
+2026-11-19 开发者反馈 Debug HAP 已在 HarmonyOS 7 手机上完成安装与正常启动。根据真实 DevEco 诊断修复了 Module 启动窗口字段/颜色资源、ArkTS `throw` 类型以及 `Promise.catch` 回调参数类型。产品与 Debug 签名绑定通过**仅存在于开发者本地的配置**完成，**私有密码/证书路径没有进入公开分支**。
+
+- [Gate A 真实构建与启动记录](docs/HAP_GATE_A_REPORT.md)
+- [签名凭据安全及 Git 提交检查](docs/HARMONY_SIGNING_SECURITY.md)
+- [后续 WS63 SDK 编译 Gate](https://github.com/hu-qi/XiaohongDeskCard/issues/7)
+
+**下一阶段仍需在小鸿 SDK 中实现并编译真实 BLE GATT、SLE SSAP、Wi-Fi HTTP、Flash/NV 与原屏 LVGL 服务。手机启动成功不能替代板端联调。**
