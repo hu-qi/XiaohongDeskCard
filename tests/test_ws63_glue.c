@@ -9,6 +9,9 @@ typedef struct {
     unsigned unlocks;
     unsigned saves;
     unsigned acks;
+    unsigned statuses;
+    desk_result_t last_status_result;
+    desk_http_state_t last_status_state;
     bool locked;
     bool currently_authorized;
     desk_content_t content;
@@ -47,6 +50,21 @@ static void ack(void *ctx, desk_channel_t channel, uint32_t peer,
     assert(desk_wire_decode_ack(bytes, DESK_ACK_SIZE, &p->last_ack) == DESK_WIRE_OK);
     p->acks++;
 }
+static void on_status(void *ctx, desk_channel_t channel, uint32_t peer,
+                      desk_result_t result, const desk_http_state_t *snapshot)
+{
+    fake_platform_t *p = (fake_platform_t *)ctx;
+    assert(channel == DESK_CHANNEL_BLE && peer == 55u);
+    p->statuses++;
+    p->last_status_result = result;
+    if (result == DESK_OK) {
+        assert(snapshot != NULL);
+        p->last_status_state = *snapshot;
+    } else {
+        assert(snapshot == NULL);
+    }
+}
+
 static void lock(void *ctx)
 {
     fake_platform_t *p = (fake_platform_t *)ctx;
@@ -78,7 +96,10 @@ int main(void)
     assert(desk_ws63_port_ui_drain(&port) == 0u);
 
     desk_ws63_callbacks_t callbacks = {load_nv, save_nv, notify, ack, lock, unlock,
-                                       &platform, authorize_on_ui};
+                                       &platform, authorize_on_ui, on_status};
+    desk_ws63_callbacks_t missing_status = callbacks;
+    missing_status.enqueue_status = NULL;
+    assert(!desk_ws63_port_init(&port, missing_status, NULL));
     desk_ws63_callbacks_t missing_recheck = callbacks;
     missing_recheck.authorize_on_ui = NULL;
     assert(!desk_ws63_port_init(&port, missing_recheck, NULL));
@@ -108,6 +129,15 @@ int main(void)
     assert(port.view.header->bg == 0x173A60u);
     assert(platform.locks == platform.unlocks && !platform.locked);
 
+    /* BLE status shares the exact UI FIFO and reflects the applied content. */
+    assert(desk_dispatcher_submit_status(&port.dispatcher, DESK_CHANNEL_BLE,
+                                         55u, true) == DESK_DISPATCH_QUEUED);
+    assert(desk_ws63_port_ui_drain(&port) == 1u);
+    assert(platform.statuses == 1u);
+    assert(platform.last_status_result == DESK_OK);
+    assert(platform.last_status_state.revision == 1u);
+    assert(strcmp(platform.last_status_state.display.name, "胡琦") == 0);
+
     /* A command accepted by BLE before owner revocation must be rejected by
      * the UI task immediately before applying NV/display changes. */
     item.command.request_id = 2u;
@@ -118,6 +148,12 @@ int main(void)
     assert(platform.last_ack.request_id == 2u);
     assert(platform.last_ack.result == DESK_UNAUTHORIZED);
     assert(platform.saves == 1u && port.core.revision == 1u);
+    /* Queued status is equally revoked at execution time: never leak name. */
+    assert(desk_dispatcher_submit_status(&port.dispatcher, DESK_CHANNEL_BLE,
+                                         55u, true) == DESK_DISPATCH_QUEUED);
+    assert(desk_ws63_port_ui_drain(&port) == 1u);
+    assert(platform.statuses == 2u);
+    assert(platform.last_status_result == DESK_UNAUTHORIZED);
     platform.currently_authorized = true;
 
     desk_ws63_port_destroy(&port);
