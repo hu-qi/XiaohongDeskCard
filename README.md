@@ -185,3 +185,14 @@ python3 tools/ws63_overlay.py --output build/ws63-overlay
 [Wi-Fi HTTP 接口与安全要求](docs/WIFI_HTTP_INTEGRATION.md) · [协议 v1](docs/PROTOCOL.md)。
 
 **依然没有 WS63 实际 HTTP Server、DevEco HAP 编译或实机结果。现在不需要操作小鸿 AI / HarmonyOS 7 手机。**
+
+
+## 2026-11-19 · UI 状态快照与三模响应 mailbox
+
+`GET status`、`PUT content` 现共享唯一 Desk Dispatcher 顺序执行；`desk_reply_mailbox` 将 UI 任务产生的 BLE/SLE 业务 ACK 和 Wi-Fi 状态快照转交通信工作线程。已覆盖请求顺序、权限撤销、显示失败后持久化与实际显示的差异、响应队列满时的背压/未知结果。
+
+桌面模拟器的 Wi-Fi GET/PUT 和 BLE/SLE Mock 都已经经过同一 C99 UI 队列及 mailbox。新模块纳入 WS63 待审查源码暂存包（**11 C + 11 H**）。
+
+[UI GET/SET 与回传队列规范](docs/UI_MESSAGE_BRIDGE.md) · [SDK 编译 Gate](https://github.com/hu-qi/XiaohongDeskCard/issues/7)。
+
+**仍未进行真实 WS63 SDK 固件构建或 HarmonyOS HAP 编译，尚不能要求用户烧录或运行 App。**
