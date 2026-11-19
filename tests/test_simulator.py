@@ -146,6 +146,36 @@ class SimulatorTests(unittest.TestCase):
         self.assertEqual(self.sim.snapshot()["revision"], before["revision"])
         self.assertEqual(self.sim.snapshot()["display"], before["display"])
 
+    def test_09_reject_duplicate_missing_and_unknown_json(self):
+        before = self.sim.snapshot()["revision"]
+        original = self.payload()
+        duplicate_raw = json.dumps(original, ensure_ascii=False).replace(
+            '"requestId": ', '"requestId": 3, "requestId": ', 1
+        ).encode("utf-8")
+        req = Request(self.address + "/api/v1/desk/content", method="PUT",
+                      data=duplicate_raw, headers={
+                          "Authorization": "Bearer test-secret",
+                          "Content-Type": "application/json"
+                      })
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(req, timeout=5)
+        self.assertEqual(caught.exception.code, 400)
+
+        incomplete = self.payload()
+        del incomplete["content"]["title"]
+        status, result = self.request("/api/v1/desk/content", "PUT", incomplete)
+        self.assertEqual((status, result["result"]), (400, "BAD_INPUT"))
+        extra = self.payload()
+        extra["content"]["unexpected"] = "secret"
+        status, result = self.request("/api/v1/desk/content", "PUT", extra)
+        self.assertEqual((status, result["result"]), (400, "BAD_INPUT"))
+
+        too_big = self.payload()
+        too_big["content"]["name"] = "x" * 1024
+        status, result = self.request("/api/v1/desk/content", "PUT", too_big)
+        self.assertEqual((status, result["result"]), (400, "BAD_INPUT"))
+        self.assertEqual(self.sim.snapshot()["revision"], before)
+
     def test_08_browser(self):
         with urlopen(self.address + "/", timeout=5) as response:
             page = response.read().decode("utf-8")
