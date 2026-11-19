@@ -16,7 +16,10 @@ static int port_save(void *ctx, const desk_content_t *value, uint32_t revision)
 static int port_render(void *ctx, const desk_content_t *value)
 {
     desk_ws63_port_t *port = (desk_ws63_port_t *)ctx;
-    return desk_lvgl_view_render(&port->view, value);
+    if (!desk_lvgl_view_render(&port->view, value)) return 0;
+    port->displayed = *value;
+    port->has_displayed = true;
+    return 1;
 }
 
 static void port_lock(void *ctx)
@@ -50,12 +53,29 @@ static bool port_recheck(void *ctx, desk_channel_t channel, uint32_t peer)
     return port->callbacks.authorize_on_ui(port->callbacks.context, channel, peer);
 }
 
+static bool port_read_display(void *ctx, desk_content_t *out)
+{
+    const desk_ws63_port_t *port = (const desk_ws63_port_t *)ctx;
+    if (!port->has_displayed || out == NULL) return false;
+    *out = port->displayed;
+    return true;
+}
+
+static void port_status(void *ctx, desk_channel_t channel, uint32_t peer,
+                        desk_result_t result, const desk_http_state_t *state)
+{
+    desk_ws63_port_t *port = (desk_ws63_port_t *)ctx;
+    port->callbacks.enqueue_status(port->callbacks.context,
+                                   channel, peer, result, state);
+}
+
 int desk_ws63_port_init(desk_ws63_port_t *port, desk_ws63_callbacks_t callbacks,
                         lv_obj_t *parent)
 {
     if (port == NULL || callbacks.load == NULL || callbacks.save == NULL ||
         callbacks.post_display_event == NULL || callbacks.enqueue_ack == NULL ||
         callbacks.authorize_on_ui == NULL ||
+        callbacks.enqueue_status == NULL ||
         ((callbacks.lock == NULL) != (callbacks.unlock == NULL)))
         return 0;
     memset(port, 0, sizeof(*port));
@@ -76,6 +96,8 @@ int desk_ws63_port_init(desk_ws63_port_t *port, desk_ws63_callbacks_t callbacks,
     dispatch_hooks.on_result = port_ack;
     dispatch_hooks.context = port;
     dispatch_hooks.authorize_on_ui = port_recheck;
+    dispatch_hooks.read_display_on_ui = port_read_display;
+    dispatch_hooks.on_status = port_status;
     if (!desk_dispatcher_init(&port->dispatcher, &port->core, dispatch_hooks)) {
         desk_lvgl_view_destroy(&port->view);
         return 0;
