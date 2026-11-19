@@ -29,6 +29,13 @@ desk_wifi_result_t desk_wifi_submit_put(desk_dispatcher_t *dispatcher,
                                         const uint8_t *body, size_t body_size,
                                         uint32_t *request_id);
 
+/*
+ * GET status must also be authenticated and queued on the UI owner task.
+ * Status response is delivered through desk_dispatch_hooks_t.on_status.
+ */
+desk_wifi_result_t desk_wifi_submit_get(desk_dispatcher_t *dispatcher,
+                                        uint32_t peer_token, bool authorized);
+
 /* Validate UI-task ACK before responding to the originating HTTP request. */
 bool desk_wifi_match_ack(uint32_t expected_request_id,
                          const uint8_t *ack, size_t ack_size,
