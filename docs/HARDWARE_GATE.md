@@ -5,7 +5,7 @@
 > 已知可用设备：小鸿 AI WS63 原装屏 1 台、HarmonyOS 7 真机 1 台。
 > 具体手机型号、NearLink 硬件支持、手机开发者选项等尚未核对。系统是 HarmonyOS 7 **不等于** 手机一定具备 NearLink 硬件。
 
-## Gate A：软件验证（无需设备）— 进行中
+## Gate A：App 首次编译/安装启动 — 用户已验证通过（后续功能验证仍在进行）
 
 - [x] C99 Desk Core / Desk Wire 帧编解码
 - [x] BLE/SLE Mock 分片与真实 C99 Core HTTP 模拟器
@@ -16,7 +16,7 @@
 - [x] 浏览器 BLE/SLE 模拟入口经过真实 C99 Radio Ingress、Dispatcher 和 ACK 完整路径
 - [x] 原始无线数据加入确定性错误输入压力测试，并纳入 C UBSan 自动检查（非安全认证）
 - [x] 小鸿 OpenHarmony 源码布局离线预检查器及测试（不等于执行真实 SDK 构建）
-- [ ] DevEco Studio / Hvigor **真实构建通过 HAP**（GitHub 结构检查不等于 HAP 编译）
+- [x] **2026-11-19 用户本地 DevEco Studio / SDK 6.0.2(22) Debug HAP 编译成功，并在 HarmonyOS 7 手机安装启动**；共享 CI 仍不能替代 DevEco 编译。
 - [x] 软件侧校验分包恢复、CRC、超时及预写入安全回退策略（Node 22 + C99 测试；非无线实测）
 - [ ] 指定安全的受控局域网/模拟器互联测试方案
 
@@ -24,7 +24,7 @@
 
 - [ ] 固定并记录小鸿 WS63 原仓库及 SDK 的实际 commit、构建说明和工具链
 - [ ] 编译原始官方样例，保存成功日志与产物校验和
-- [ ] 将已写好的 `desk_core`、`desk_wire`、`desk_packet`、`desk_dispatcher`、LVGL 控件及 `desk_ws63_glue` 真正植入上游 SDK GN 构建并编译；NV 双槽适配仍待开发
+- [ ] 将 `desk_core`、`desk_wire`、`desk_packet`、`desk_dispatcher`、双槽 NV 和 LVGL/WS63 CMSIS 适配层真正植入上游 SDK GN 构建；双槽 NV 的 C99 逻辑已完成，但真实 Flash HAL 仍待绑定
 - [ ] 编译 BLE GATT Peripheral/Server 与 SLE SSAP Server，并加入相同 UUID
 - [ ] 编译 Wi-Fi HTTP 控制接口与业务 ACK，确认三者任务边界
 - [ ] 检查 RAM/Flash 预算、字符集与 UI 任务单线程约束
@@ -84,7 +84,7 @@
 
 ### 适配依据
 
-详细工程接入路径、事件流与离线源码预检查见 [WS63_INTEGRATION.md](WS63_INTEGRATION.md)。当前 CI 只编译 C99 与 LVGL **测试替身**；没有运行上游 `hb build`，没有烧录固件。
+详细工程接入路径、事件流与离线源码预检查见 [WS63_INTEGRATION.md](WS63_INTEGRATION.md)。当前 CI 已运行 C99、LVGL 测试替身、真实 LVGL 8/9 头文件/库及 CMSIS 官方头文件编译；仍没有执行上游 WS63 `hb build` 或烧录固件。
 
 
 ### 软件侧最新完成项（不需要实机）
@@ -98,10 +98,10 @@
 ### 本轮额外通过的软件验证
 
 - [x] 官方真实 LVGL 8.3.11 与 LVGL 9.3.0：均完成宿主机编译、240×240 对象更新与无屏幕刷新测试
-- [x] 离线生成 WS63 移植源码包（8 C + 8 H）、`BUILD.gn` 审查片段与 SHA-256 清单
+- [x] 离线生成 WS63 移植源码包（12 C + 12 H）、`BUILD.gn` 审查片段与 SHA-256 清单
 - [x] 生成脚本具有拒绝覆盖及缺文件失败的自动化测试
 - [ ] 确认小鸿实际 LVGL commit/版本、中文字体及 GN 条件编译，并完成真正的 WS63 SDK 构建
-- [ ] DevEco/HarmonyOS 7 真实 HAP 编译仍未开始；当前不需要用户操作实机
+- [x] 开发者已完成 DevEco Debug HAP 编译、手机安装及启动；真正 WS63 无线链路与板端屏幕未验证
 
 
 ### Wi-Fi HTTP 软件侧已完成（无需设备）
@@ -120,7 +120,7 @@
 - [x] 已保存内容与最后成功显示内容分离，渲染失败时可通过状态接口发现差异
 - [x] C99 `desk_reply_mailbox`：BLE/SLE/Wi-Fi 响应固定容量、连接 token 对应、消息满丢弃诊断、不覆盖旧回复
 - [x] 桌面模拟器 GET/PUT 和 BLE/SLE Mock 均通过同一 UI 队列和回应邮箱
-- [ ] 真实 SDK 接入 CMSIS 事件通知、socket/无线发送工作队列与 backpressure；固件及 HAP 编译未完成
+- [ ] 真实 SDK 接入 CMSIS 事件通知、socket/无线发送工作队列与 backpressure；**WS63 固件编译未完成**，但 App Debug HAP 首次编译与安装已验证
 
 
 ### 回传队列并发消费修复
@@ -137,6 +137,13 @@
 - [x] 4 字节消息大小检查、非阻塞队列投递、队列满时 LVGL 轮询恢复：宿主机模拟测试通过
 - [x] SDK 源码暂存包包含 12 C + 12 H 及 SHA-256 清单
 - [x] DevEco Studio 首次 **只编译不运行** 操作及回报日志清单已编写，见 [HAP_BUILD_HANDOFF.md](HAP_BUILD_HANDOFF.md)
-- [ ] **Gate A 待执行**：在真实 DevEco + HarmonyOS SDK 6.0.2(22) 构建 HAP（需用户/可用编译环境执行；本端无 DevEco）
+- [x] **Gate A 首次 DevEco 构建与安装启动已完成**（开发者 2026-11-19 报告），见 [HAP_GATE_A_REPORT.md](HAP_GATE_A_REPORT.md)
 - [ ] **Gate B 待执行**：真实小鸿 SDK 的 GN、CMSIS mutex/队列/事件、Flash 与 GATT/SSAP/HTTP 集成后才能运行 `hb build`
-- [ ] **Gate C 待执行**：HarmonyOS 7 运行 App 和小鸿 AI 真机联调（还没有可验证的编译产物，不应提前进行）
+- [ ] **Gate C 待执行**：HarmonyOS 7 App 已能独立启动，但尚无可编译的 WS63 桌牌固件；板卡烧录与 BLE/SLE/Wi-Fi 真机联调均未开始
+
+
+### 2026-11-19 Gate A 实际验证节点
+
+用户反馈 App 已正常完成 Debug HAP 构建、安装及 HarmonyOS 7 真机启动；对应 Stage 启动窗口、ArkTS 严格模式问题已同步到 PR。**本地调试签名文件和密码不进入 GitHub 仓库**，见 [HARMONY_SIGNING_SECURITY.md](HARMONY_SIGNING_SECURITY.md)。
+
+这只是**手机端 App 启动验证**，不能勾选 WS63 固件编译、原屏显示、BLE GATT、SLE SSAP 或 Wi-Fi 三模设备联调。
