@@ -26,7 +26,7 @@ SENSITIVE_FIELD = re.compile(
     r'(?i)["\'](?:' + "|".join(SIGNING_KEYS) + r')["\']\s*:'
 )
 NONEMPTY_CONFIGS = re.compile(
-    r'["\']signingConfigs["\']\s*:\s*\[\s*(?!\])',
+    r'["\']signingConfigs["\']\s*:\s*\[\s*(?=\S)(?!\])',
     re.IGNORECASE,
 )
 LOCAL_PATH = re.compile(
