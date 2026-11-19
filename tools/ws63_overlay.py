@@ -27,6 +27,7 @@ CORE_SOURCES = (
     "desk_nv_store.c",
     "desk_http_json.c",
     "desk_wifi_ingress.c",
+    "desk_reply_mailbox.c",
 )
 UI_SOURCES = ("desk_view_lvgl.c", "desk_ws63_glue.c")
 
@@ -87,7 +88,7 @@ sources += [
 ]
 
 # Actual WS63 source binding remains to implement:
-#   CMSIS display event queue / lock / on-result ACK queue
+#   CMSIS display event queue / lock / reply mailbox wake + worker wiring
 #   2 independent Flash erase sectors with journal read/erase/program HAL
 #   BLE GATT Server + SLE SSAP Server service tables and ownership
 #   Wi-Fi HTTP listener, bearer auth, GET status from owner task, ACK delivery
