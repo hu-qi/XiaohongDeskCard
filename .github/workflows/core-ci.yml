@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Reject committed DevEco signing credentials
+        run: python3 tools/check_signing_safety.py --tracked
       - name: Router policy (Node 22 native TS stripping)
         run: node --experimental-strip-types --test tests/router.test.mjs
       - name: Configure
