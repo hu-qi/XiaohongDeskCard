@@ -174,3 +174,14 @@ python3 tools/ws63_overlay.py --output build/ws63-overlay
 [真实 LVGL 8/9 验证说明](docs/LVGL_SDK_COMPAT.md) · [SDK 集成与 Overlay 指南](docs/WS63_INTEGRATION.md)。
 
 **尚未完成 OpenHarmony WS63 `hb build` 与 DevEco HAP 编译；用户目前不需要进行真机操作。**
+
+
+## 设备端 Wi-Fi HTTP 统一业务链路（软件基线）
+
+已新增 `desk_http_json` 与 `desk_wifi_ingress` C99 模块：实现限制 1024B 的严格 JSON 解码（Unicode/整数/字段白名单）、Wi-Fi 更新入同一个 UI Dispatcher、业务 ACK 校验，以及 GET 状态/PUT 结果的 JSON 编码。
+
+桌面模拟器的 Wi-Fi 更新也已经改用真实 C99 JSON 与统一队列；BLE/SLE/Wi-Fi 三条模拟通道都经过同一 Desk Core。额外加入 **30,000 组异常 Wi-Fi JSON 输入测试**。
+
+[Wi-Fi HTTP 接口与安全要求](docs/WIFI_HTTP_INTEGRATION.md) · [协议 v1](docs/PROTOCOL.md)。
+
+**依然没有 WS63 实际 HTTP Server、DevEco HAP 编译或实机结果。现在不需要操作小鸿 AI / HarmonyOS 7 手机。**
