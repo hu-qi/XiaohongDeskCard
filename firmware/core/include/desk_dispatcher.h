@@ -3,6 +3,7 @@
 
 #include "desk_core.h"
 #include "desk_wire.h"
+#include "desk_http_json.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -30,6 +31,7 @@ typedef struct {
     uint32_t peer_token;
     bool authorized;
     desk_set_command_t command;
+    bool is_status_read; /* Appended for compatibility with SET initializers. */
 } desk_dispatch_item_t;
 
 typedef struct {
@@ -57,6 +59,11 @@ typedef struct {
      */
     bool (*authorize_on_ui)(void *context, desk_channel_t channel,
                             uint32_t peer_token);
+    /* Read visible content ONLY on the LVGL owner task. */
+    bool (*read_display_on_ui)(void *context, desk_content_t *out);
+    /* Nonblocking delivery; state is valid only for DESK_OK. */
+    void (*on_status)(void *context, desk_channel_t channel, uint32_t peer_token,
+                      desk_result_t result, const desk_http_state_t *state);
 } desk_dispatch_hooks_t;
 
 typedef struct {
@@ -73,6 +80,12 @@ bool desk_dispatcher_init(desk_dispatcher_t *dispatcher, desk_core_t *core,
 /* May be called on BLE/SLE/HTTP worker tasks, but not interrupt context. */
 desk_dispatch_status_t desk_dispatcher_submit(desk_dispatcher_t *dispatcher,
                                               const desk_dispatch_item_t *item);
+
+/* GET status shares FIFO with writes for linearizable snapshots. */
+desk_dispatch_status_t desk_dispatcher_submit_status(desk_dispatcher_t *dispatcher,
+                                                     desk_channel_t channel,
+                                                     uint32_t peer_token,
+                                                     bool authorized);
 
 /*
  * Only call from the single LVGL owner task.
