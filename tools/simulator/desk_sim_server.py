@@ -81,11 +81,10 @@ class DeskSimulator:
             ctypes.POINTER(Content), ctypes.POINTER(Content), ctypes.POINTER(ctypes.c_uint32)
         ]
         self.lib.desk_sim_snapshot.restype = ctypes.c_int
-        self.lib.desk_sim_apply_set.argtypes = [
-            ctypes.c_uint32, ctypes.c_uint32, ctypes.c_char_p,
-            ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int
+        self.lib.desk_sim_apply_json.argtypes = [
+            ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t, ctypes.c_int
         ]
-        self.lib.desk_sim_apply_set.restype = ctypes.c_int
+        self.lib.desk_sim_apply_json.restype = ctypes.c_int
         self.lib.desk_sim_apply_fragmented.argtypes = [
             ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t,
             ctypes.c_size_t, ctypes.c_int, ctypes.c_int
@@ -118,11 +117,10 @@ class DeskSimulator:
     def submit(self, transport: str, command: dict[str, Any], authorized: bool) -> dict[str, Any]:
         with self.lock:
             if transport == "wifi":
-                c = command["content"]
-                result = self.lib.desk_sim_apply_set(
-                    command["requestId"], command["expectedRevision"],
-                    *(c[key].encode("utf-8") for key in ("name", "title", "organization", "theme")),
-                    int(authorized))
+                # Exercise the same strict C JSON parser and UI queue as WS63.
+                payload = json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                array = (ctypes.c_uint8 * len(payload)).from_buffer_copy(payload)
+                result = self.lib.desk_sim_apply_json(array, len(payload), int(authorized))
             elif transport in ("ble", "sle"):
                 frame = frame_for(command)
                 array = (ctypes.c_uint8 * len(frame)).from_buffer_copy(frame)
