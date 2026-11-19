@@ -102,3 +102,12 @@
 - [x] 生成脚本具有拒绝覆盖及缺文件失败的自动化测试
 - [ ] 确认小鸿实际 LVGL commit/版本、中文字体及 GN 条件编译，并完成真正的 WS63 SDK 构建
 - [ ] DevEco/HarmonyOS 7 真实 HAP 编译仍未开始；当前不需要用户操作实机
+
+
+### Wi-Fi HTTP 软件侧已完成（无需设备）
+
+- [x] Wi-Fi 严格 JSON v1 解析、UTF-8 Unicode、整数边界、状态与业务 ACK JSON 编码
+- [x] Wi-Fi 授权入队、UI 实际执行前所有权复核、同 BLE/SLE 共用 Dispatcher 的测试
+- [x] 30,000 组正常/畸形 JSON 输入压力测试，纳入 CTest/UBSan
+- [x] 桌面 HTTP 模拟器的 Wi-Fi 更新已走真正 C99 JSON → Wi-Fi Ingress → UI Dispatcher → ACK
+- [ ] 真实 WS63 Wi-Fi HTTP socket/server、GET 状态快照、认证/TLS、ACK 任务队列及 SDK 编译，未执行
