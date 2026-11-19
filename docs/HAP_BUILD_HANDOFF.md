@@ -39,7 +39,7 @@
    git rev-parse HEAD
    ```
 
-   如果此前已克隆，请先 `git fetch origin`，再 `git switch feat/issue-7` 和 `git pull --ff-only`。本流程要求检出**包含本轮改动**的分支：`feat/issue-7`（自动签名占位、`NearLinkCapability.ets` 运行期能力守卫、Gate A/B 回传记录表均在该分支）。若该分支已更新或合入，可改检出已验证提交 `94faf9373c983df95a4c500149cb32be2a4164f6`（`git switch --detach 94faf9373c983df95a4c500149cb32be2a4164f6`）。**不要**再检出 `feat/desk-core-triradio-baseline`——该分支上的同名文档为旧版且 `apps/harmony/build-profile.json5` 未带 `"signingConfig": "default"`，按本文档执行将无法验证本轮改动。无论采用哪种检出方式，都必须记录 40 位完整 HEAD SHA（不得只写短 SHA）以便归因。
+   如果此前已克隆，请先 `git fetch origin`，再 `git switch feat/issue-7` 和 `git pull --ff-only`。本流程要求检出**包含本轮改动**的分支：`feat/issue-7`（自动签名占位、`NearLinkCapability.ets` 运行期能力守卫、Gate A/B 回传记录表均在该分支）；若该分支已合入，改为检出合入后的基线分支，并确认 `apps/harmony/build-profile.json5` 含 `"signingConfig": "default"`、本文档含 Gate A/B 回传记录表，否则说明检出的仍是旧版，不得据此记录门禁结论。**不要**检出未合入前的 `feat/desk-core-triradio-baseline`：其上同名文档为旧版且产品未带签名占位，按本文档执行将无法验证本轮改动。无论采用哪种检出方式，都必须记录 40 位完整 HEAD SHA（不得只写短 SHA）以便归因。
 
 2. **DevEco Studio → Open Project**，选择 `XiaohongDeskCard/apps/harmony`（不要选择仓库顶层）。不要在桌牌 App 中输入任何真实 BLE 绑定凭据或 Wi-Fi Token。
 
