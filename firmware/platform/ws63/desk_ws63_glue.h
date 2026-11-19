@@ -26,12 +26,23 @@ typedef struct {
      * execution time, including for Wi-Fi sessions. */
     bool (*authorize_on_ui)(void *context, desk_channel_t channel,
                             uint32_t peer_token);
+    /*
+     * MANDATORY: nonblocking reply to HTTP/BLE/SLE status worker.
+     * Copy *state into a bounded message before returning, because the
+     * UI-task-owned snapshot is invalid after the callback returns.
+     * state == NULL when result != DESK_OK.
+     */
+    void (*enqueue_status)(void *context, desk_channel_t channel,
+                           uint32_t peer_token, desk_result_t result,
+                           const desk_http_state_t *state);
 } desk_ws63_callbacks_t;
 
 typedef struct {
     desk_core_t core;
     desk_dispatcher_t dispatcher;
     desk_lvgl_view_t view;
+    desk_content_t displayed;
+    bool has_displayed;
     desk_ws63_callbacks_t callbacks;
     bool ready;
 } desk_ws63_port_t;
