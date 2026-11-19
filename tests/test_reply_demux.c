@@ -171,7 +171,7 @@ int main(void)
     assert(desk_reply_discard_peer(&f.mailbox, DESK_CHANNEL_WIFI, 0u) == 0u);
     assert(desk_reply_pending(&f.mailbox) == 0u);
     assert(f.locks == f.unlocks && !f.held);
-    assert(f.wakes == 12u);
+    assert(f.wakes == 14u);
     puts("PASS: per-connection reply take/discard, out-of-order worker scheduling,"
          " ring wrap, memory erase and channel generation isolation");
     return 0;
