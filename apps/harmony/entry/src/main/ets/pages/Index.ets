@@ -52,7 +52,7 @@ struct Index {
     this.discovery = null;
     if (discovery !== null) {
       discovery.stopBle();
-      discovery.stopSle().catch((_error) => {});
+      discovery.stopSle().catch((_error: Error) => {});
     }
   }
 
@@ -81,7 +81,7 @@ struct Index {
         if (channel === DeskChannel.BLE) {
           discovery.stopBle();
         } else {
-          discovery.stopSle().catch((_error) => {});
+          discovery.stopSle().catch((_error: Error) => {});
         }
         this.discoveryStatus = channel.toUpperCase() + ' 扫描已结束';
         this.scanTimer = -1;
@@ -293,7 +293,7 @@ struct Index {
           Text(this.status).fontSize(12).fontColor('#305682')
         }.alignItems(HorizontalAlign.Start).width('100%')
           .padding(16).backgroundColor('#ffffff').borderRadius(16)
-        Text('Beta · 未进行 DevEco HAP 编译及小鸿 AI 实机验证')
+        Text('Beta · App 已在 HarmonyOS 7 启动；小鸿固件及三模联调待验证')
           .fontSize(11).fontColor('#7d8696')
       }.width('100%').padding(16).alignItems(HorizontalAlign.Center)
     }.height('100%').width('100%').backgroundColor('#eff2f6')
