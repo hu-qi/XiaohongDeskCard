@@ -1,14 +1,14 @@
 # XiaohongDeskCard · Gate A：HarmonyOS App 首次 DevEco 编译交接
 
-状态：**现在可以进行第一轮「只编译、不运行」的 HAP 编译诊断。** GitHub Actions 已运行源文件结构与 C99/LVGL/CMSIS 测试，但没有华为 DevEco SDK，因此不能替代真正的 ArkTS 编译器。第一次构建的目标是得到明确的编译通过记录，或者可定位的错误日志。
+状态：**2026-11-19 开发者已在 DevEco 成功构建 Debug HAP，并安装启动 HarmonyOS 7 真机**。本文保留为日后复现或排查的只编译操作指南；本次成功依据见 [Gate A 实际验证记录](HAP_GATE_A_REPORT.md)。GitHub Actions 仍不包含华为 DevEco 编译器。
 
-**本流程不需要小鸿 AI、不需要 HarmonyOS 7 手机、不安装 App、不烧录固件、不启用 BLE/SLE/Wi-Fi 设备连接。**
+**只复现 HAP 编译时不需要小鸿 AI 或手机。** 本次用户已经额外完成手机安装和启动，但尚未验证真实 WS63 三模联通。
 
 ## 前置条件
 
 - macOS/Windows 已装 DevEco Studio，且能安装项目所配置的 **HarmonyOS SDK 6.0.2(22)**。如果你只有新 SDK，先保留版本信息，不要未经验证自行批量改 `targetSdkVersion` 或导入新的 NearLink API。
 - 本地 Git 有仓库 `hu-qi/XiaohongDeskCard` 的可检出副本。
-- 工程里 `apps/harmony/build-profile.json5` 和 `apps/harmony/hvigor/hvigor-config.json5` 的基线均为 6.0.2，源码采用 `@kit.NearLinkKit`；**接口能否编译仍待此项检查**。
+- 工程里 `apps/harmony/build-profile.json5` 和 `apps/harmony/hvigor/hvigor-config.json5` 的基线均为 6.0.2，源码采用 `@kit.NearLinkKit`；用户本机的 Stage 入口编译已通过，仍需针对未接入页面的 BLE/SLE 链路与 SDK 实际数据路径进行编译/运行验证。
 
 ## 操作步骤（首次只进行 HAP 构建）
 
@@ -48,8 +48,8 @@
 
 ## 与固件/真机阶段的区别
 
-- **Gate A（当前）**：DevEco Studio 首次导入、同步、编译 HAP，**无需运行**。
+- **Gate A（首次已通过）**：DevEco Studio 编译、签名、安装并启动 HarmonyOS 7 真机；日后改动仍需回归验证。
 - **Gate B（后续）**：WS63 OpenHarmony 源码树与 `hb build -f`，必须先完成上游 GN、CMSIS、NV/Flash、GATT/SSAP/HTTP 板级适配；**现阶段还不能把生成的 WS63 overlay 视为完整固件**。
 - **Gate C（最后）**：拿到经过软件编译的固件和 HAP 后，再通知用户进行烧录、手机安装运行与 BLE/SLE/Wi-Fi 真机联调。
 
-若不能立即进行 Gate A，仍可继续进行 SDK 独立的源码开发；**不需要为了构建诊断提前改变手机和小鸿板卡状态**。
+Gate A 的首次编译与安装启动已经完成。**下一关是 Gate B 的 WS63 实际 SDK 集成与编译；目前不需要再次安装手机 App 或烧录小鸿板卡。**
