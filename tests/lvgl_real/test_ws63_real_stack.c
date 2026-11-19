@@ -5,6 +5,7 @@
  */
 #include "desk_ws63_cmsis.h"
 #include "desk_reply_mailbox.h"
+#include "desk_wifi_ingress.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
