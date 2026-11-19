@@ -32,14 +32,14 @@ The application packet parser is **implemented and host-tested** in `desk_packet
 
 ## HTTP JSON mapping
 
-For Wi-Fi, the authenticated HTTP handler may parse JSON into `desk_set_command_t` and send it directly to the Desk task; it does not need to use the binary BLE/SLE representation.
+Wi-Fi uses an independent **implemented** bounded C99 JSON codec, `desk_http_decode_set`, and `desk_wifi_submit_put` to place decoded commands into the exact same Desk Dispatcher as BLE/SLE. No binary frame is needed over HTTP. The real WS63 HTTP socket/authorization worker is still pending; see [WIFI_HTTP_INTEGRATION.md](WIFI_HTTP_INTEGRATION.md).
 
 ## Known limitations
 
-- Only `desk.setContent` has an implemented binary codec; status/ACK are forthcoming.
+- BLE/SLE binary SetContent and 16-byte business ACK are implemented; a binary status operation/readback over real GATT/SSAP remains pending.
 - Current retry de-duplication remembers only the last request in RAM; persisted cross-reboot anti-replay and full command audit need platform support.
 - A saved content update may report render failure; repainting on the UI task can recover from that failure.
-- Storage callbacks must implement power-loss-safe persistence; the core library doesn't implement flash storage.
+- Portable two-slot Flash/NV persistence is implemented; the actual WS63 erase/program HAL must still be bound and compiled.
 - The protocol version is experimental and may change before any SDK-based device release.
 
 
