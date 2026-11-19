@@ -173,3 +173,12 @@ python3 tools/ws63_preflight.py --root /path/to/openharmony --json
 上游实际 Wi-Fi 服务仍需：**HTTP Server/socket 回调、令牌/所有权校验、GET 读取 owner task 快照、PUT 异步等待并匹配 ACK、结果/超时响应、TLS 与凭据安全**。在不同 Xiaohong SDK 分支，HTTP Server 实现目录可能变化，不能根据示例直接推断已集成。
 
 详见 [WIFI_HTTP_INTEGRATION.md](WIFI_HTTP_INTEGRATION.md)。`tools/ws63_overlay.py` 已将新增 Wi-Fi 模块纳入移植包：现在是 **10 C + 10 H**，需在实际 `BUILD.gn` 审核后编译。
+
+
+## 十一、三模响应 mailbox 与 GET/PUT 线性化状态
+
+原来只有更新指令入队，现在增加 `desk_dispatcher_submit_status`：Wi-Fi GET 与 BLE/SLE/Wi-Fi PUT 共用同一个有界 FIFO，由唯一的 UI 任务按先后顺序读取和修改 Desk Core。WS63 glue 保存上次**成功渲染**的内容用于区分 `content` 与 `display`，并通过必填的 `enqueue_status` 把 GET 结果送回原连接。
+
+新模块 `firmware/core/desk_reply_mailbox.[ch]` 负责 ACK / 状态响应的有限容量拷贝与原连接标识关联；满队列不会覆盖旧响应，必须由平台实现限流、超时和状态对账。浏览器模拟器已使用真实 C99 请求 FIFO 和回传 mailbox，真实 HTTP/GATT/SSAP worker 与 CMSIS 消息队列尚待 SDK 编译。
+
+详见 [UI_MESSAGE_BRIDGE.md](UI_MESSAGE_BRIDGE.md)。移植源码暂存包现为 **11 个 C 源文件 + 11 个头文件**。
