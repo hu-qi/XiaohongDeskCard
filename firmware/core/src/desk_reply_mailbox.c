@@ -100,6 +100,69 @@ bool desk_reply_pop(desk_reply_mailbox_t *box, desk_reply_item_t *out)
     return true;
 }
 
+/*
+ * Remove one logical FIFO index; caller holds the mailbox lock.
+ * Moving at most CAPACITY-1 records keeps RAM and runtime bounded. This
+ * preserves the relative order of every other connection's responses.
+ */
+static void erase_at(desk_reply_mailbox_t *box, unsigned index)
+{
+    for (unsigned i = index; i + 1u < box->count; ++i) {
+        const unsigned here = (box->head + i) % DESK_REPLY_CAPACITY;
+        const unsigned next = (box->head + i + 1u) % DESK_REPLY_CAPACITY;
+        box->queue[here] = box->queue[next];
+    }
+    const unsigned last = (box->head + box->count - 1u) %
+                          DESK_REPLY_CAPACITY;
+    /* No copies of an already-consumed person's name left in the ring. */
+    memset(&box->queue[last], 0, sizeof(box->queue[last]));
+    box->count--;
+    if (box->count == 0u) box->head = 0u;
+}
+
+bool desk_reply_take_for(desk_reply_mailbox_t *box, desk_channel_t channel,
+                         uint32_t peer_token, desk_reply_item_t *out)
+{
+    if (box == NULL || out == NULL || !valid_channel(channel) ||
+        peer_token == 0u) return false;
+
+    box_lock(box);
+    for (unsigned i = 0u; i < box->count; ++i) {
+        const unsigned slot = (box->head + i) % DESK_REPLY_CAPACITY;
+        if (box->queue[slot].channel == channel &&
+            box->queue[slot].peer_token == peer_token) {
+            *out = box->queue[slot];
+            erase_at(box, i);
+            box_unlock(box);
+            return true;
+        }
+    }
+    box_unlock(box);
+    return false;
+}
+
+unsigned desk_reply_discard_peer(desk_reply_mailbox_t *box,
+                                 desk_channel_t channel, uint32_t peer_token)
+{
+    if (box == NULL || !valid_channel(channel) || peer_token == 0u)
+        return 0u;
+
+    unsigned removed = 0u;
+    box_lock(box);
+    for (unsigned i = 0u; i < box->count;) {
+        const unsigned slot = (box->head + i) % DESK_REPLY_CAPACITY;
+        if (box->queue[slot].channel == channel &&
+            box->queue[slot].peer_token == peer_token) {
+            erase_at(box, i);
+            removed++;
+        } else {
+            i++;
+        }
+    }
+    box_unlock(box);
+    return removed;
+}
+
 unsigned desk_reply_pending(desk_reply_mailbox_t *box)
 {
     if (box == NULL) return 0u;
