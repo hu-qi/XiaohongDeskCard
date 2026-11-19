@@ -7,6 +7,7 @@
 #include "desk_packet.h"
 #include "desk_dispatcher.h"
 #include "desk_radio_ingress.h"
+#include "desk_wifi_ingress.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -137,6 +138,38 @@ int desk_sim_apply_set(uint32_t request_id, uint32_t expected_revision,
         memcpy(targets[i], sources[i], n + 1u);
     }
     return desk_core_apply(&g_core, &cmd, authorized != 0);
+}
+
+/*
+ * Simulated Wi-Fi PUT also traverses the REAL portable firmware path:
+ * JSON decode -> Wi-Fi ingress -> shared dispatcher -> UI owner -> business ACK.
+ * Network socket/HTTP/authorization are still mocked by the Python wrapper.
+ */
+int desk_sim_apply_json(const uint8_t *body, size_t size, int authorized)
+{
+    if (!g_initialized || body == NULL || size == 0u) return DESK_BAD_INPUT;
+    g_session_counter++;
+    if (g_session_counter == 0u) g_session_counter = 1u;
+    const uint32_t peer_token = g_session_counter;
+    uint32_t request_id = 0u;
+    memset(&g_transport_reply, 0, sizeof(g_transport_reply));
+
+    const desk_wifi_result_t status = desk_wifi_submit_put(
+        &g_dispatcher, peer_token, authorized != 0, body, size, &request_id);
+    if (status == DESK_WIFI_UNAUTHORIZED) return DESK_UNAUTHORIZED;
+    if (status != DESK_WIFI_QUEUED) return DESK_BAD_INPUT;
+
+    if (!desk_dispatcher_process_one(&g_dispatcher) ||
+        !g_transport_reply.valid ||
+        g_transport_reply.channel != DESK_CHANNEL_WIFI ||
+        g_transport_reply.peer_token != peer_token)
+        return DESK_BAD_INPUT;
+
+    desk_ack_t ack = {0};
+    if (!desk_wifi_match_ack(request_id, g_transport_reply.ack,
+                             DESK_ACK_SIZE, &ack))
+        return DESK_BAD_INPUT;
+    return (int)ack.result;
 }
 
 int desk_sim_apply_wire(const uint8_t *bytes, size_t size, int authorized)
