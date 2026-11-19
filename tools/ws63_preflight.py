@@ -23,6 +23,7 @@ REQUIRED = {
 OPTIONAL = {
     "sdk_config": "device/soc/hisilicon/ws63v100/sdkv106/build/config/target_config/ws63/config.py",
     "vendor_config": "vendor/atomgit/xiaohong/xiaohong/config.gni",
+    "http_server": "vendor/atomgit/xiaohong/xiaohong/src/network/net_http_server.c",
     "sle_sample": "vendor/atomgit/xiaohong/samples/13_sle_uart",
     "upstream_docs": "vendor/atomgit/xiaohong/README.md",
 }
