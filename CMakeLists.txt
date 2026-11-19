@@ -136,6 +136,12 @@ if(Python3_Interpreter_FOUND)
 endif()
 
 if(Python3_Interpreter_FOUND)
+    add_test(NAME ws63_sdk_probe_tests
+        COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests -p test_ws63_sdk_probe.py
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+endif()
+
+if(Python3_Interpreter_FOUND)
     add_test(NAME ws63_gn_integration_tests
         COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests -p test_ws63_gn_integrate.py
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
