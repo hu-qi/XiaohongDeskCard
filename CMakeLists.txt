@@ -54,6 +54,10 @@ add_executable(test_wifi_ingress tests/test_wifi_ingress.c)
 target_link_libraries(test_wifi_ingress PRIVATE desk_core)
 add_test(NAME desk_wifi_ingress_tests COMMAND test_wifi_ingress)
 
+add_executable(test_status_fifo tests/test_status_fifo.c)
+target_link_libraries(test_status_fifo PRIVATE desk_core)
+add_test(NAME desk_status_fifo_tests COMMAND test_status_fifo)
+
 add_executable(test_nv_store tests/test_nv_store.c)
 target_link_libraries(test_nv_store PRIVATE desk_core)
 add_test(NAME desk_nv_store_tests COMMAND test_nv_store)
