@@ -25,6 +25,8 @@ CORE_SOURCES = (
     "desk_dispatcher.c",
     "desk_radio_ingress.c",
     "desk_nv_store.c",
+    "desk_http_json.c",
+    "desk_wifi_ingress.c",
 )
 UI_SOURCES = ("desk_view_lvgl.c", "desk_ws63_glue.c")
 
@@ -88,7 +90,8 @@ sources += [
 #   CMSIS display event queue / lock / on-result ACK queue
 #   2 independent Flash erase sectors with journal read/erase/program HAL
 #   BLE GATT Server + SLE SSAP Server service tables and ownership
-#   Wi-Fi HTTP listener and GET status / PUT content handler
+#   Wi-Fi HTTP listener, bearer auth, GET status from owner task, ACK delivery
+#   The strict JSON PUT codec and dispatch ingress ARE included above
 # There is NO complete runnable firmware here.
 """
 
