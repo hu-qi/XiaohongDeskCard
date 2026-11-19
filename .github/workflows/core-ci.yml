@@ -66,3 +66,29 @@ jobs:
         run: cmake --build build-real-lvgl --target test_lvgl_real --parallel 4
       - name: Execute real LVGL headless integration test
         run: ctest --test-dir build-real-lvgl --output-on-failure
+
+  cmsis-official-api:
+    name: Official CMSIS-RTOS2 v2.3.0 header compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned official ARM CMSIS_6 v6.2.0 headers
+        uses: actions/checkout@v4
+        with:
+          repository: ARM-software/CMSIS_6
+          ref: 6f0a58d01aa9bd2feba212097f9afe7acd991d52
+          path: external/cmsis
+          persist-credentials: false
+          sparse-checkout: |
+            CMSIS/RTOS2/Include
+            CMSIS/Core/Include
+      - name: Compile WS63 display bridge with actual CMSIS API declarations
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Wpedantic \
+            -Iexternal/cmsis/CMSIS/RTOS2/Include \
+            -Iexternal/cmsis/CMSIS/Core/Include \
+            -Ifirmware/platform/ws63 -Ifirmware/core/include \
+            -Ifirmware/display -Itests/lvgl_stub \
+            -c firmware/platform/ws63/desk_ws63_cmsis.c \
+            -o /tmp/desk_ws63_cmsis_official.o
+          echo 'PASS: CMSIS-RTOS2 signatures compile (NOT a WS63 SDK build)'
