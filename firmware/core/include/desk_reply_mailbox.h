@@ -61,8 +61,27 @@ bool desk_reply_push_status(desk_reply_mailbox_t *box, desk_channel_t channel,
                             uint32_t peer_token, desk_result_t result,
                             const desk_http_state_t *state);
 
-/* Only call on consuming communications task. Copies the entire result. */
+/*
+ * Single dispatcher worker only: unrestricted FIFO pop is UNSAFE if BLE,
+ * SLE and HTTP have independent consumers. Prefer take_for in production.
+ */
 bool desk_reply_pop(desk_reply_mailbox_t *box, desk_reply_item_t *out);
+
+/*
+ * Remove the oldest response addressed to this exact live connection, while
+ * retaining all other connections' replies in FIFO order. Safe with separate
+ * worker tasks when lock/unlock are supplied. Never matches by MAC/address.
+ */
+bool desk_reply_take_for(desk_reply_mailbox_t *box, desk_channel_t channel,
+                         uint32_t peer_token, desk_reply_item_t *out);
+
+/*
+ * On disconnect, free ONLY this connection's pending replies. Call after
+ * invalidating its generation so no already-in-flight send can target a
+ * reconnected peer. Returns the number of discarded messages.
+ */
+unsigned desk_reply_discard_peer(desk_reply_mailbox_t *box,
+                                 desk_channel_t channel, uint32_t peer_token);
 unsigned desk_reply_pending(desk_reply_mailbox_t *box);
 uint32_t desk_reply_rejected_full(desk_reply_mailbox_t *box);
 
