@@ -35,7 +35,10 @@ desk_dispatch_status_t desk_dispatcher_submit(desk_dispatcher_t *dispatcher,
 {
     if (dispatcher == NULL || dispatcher->core == NULL || item == NULL ||
         !valid_channel(item->channel) || item->peer_token == 0u ||
-        item->command.request_id == 0u)
+        (!item->is_status_read && item->command.request_id == 0u) ||
+        (item->is_status_read &&
+         (dispatcher->hooks.on_status == NULL ||
+          dispatcher->hooks.read_display_on_ui == NULL)))
         return DESK_DISPATCH_INVALID;
 
     queue_lock(dispatcher);
@@ -54,6 +57,19 @@ desk_dispatch_status_t desk_dispatcher_submit(desk_dispatcher_t *dispatcher,
     if (dispatcher->hooks.notify_ui != NULL)
         dispatcher->hooks.notify_ui(dispatcher->hooks.context);
     return DESK_DISPATCH_QUEUED;
+}
+
+desk_dispatch_status_t desk_dispatcher_submit_status(desk_dispatcher_t *dispatcher,
+                                                     desk_channel_t channel,
+                                                     uint32_t peer_token,
+                                                     bool authorized)
+{
+    desk_dispatch_item_t item = {0};
+    item.channel = channel;
+    item.peer_token = peer_token;
+    item.authorized = authorized;
+    item.is_status_read = true;
+    return desk_dispatcher_submit(dispatcher, &item);
 }
 
 bool desk_dispatcher_process_one(desk_dispatcher_t *dispatcher)
@@ -75,6 +91,30 @@ bool desk_dispatcher_process_one(desk_dispatcher_t *dispatcher)
         currently_authorized = dispatcher->hooks.authorize_on_ui(
             dispatcher->hooks.context, item.channel, item.peer_token);
     }
+    if (item.is_status_read) {
+        if (!currently_authorized) {
+            dispatcher->hooks.on_status(dispatcher->hooks.context,
+                                        item.channel, item.peer_token,
+                                        DESK_UNAUTHORIZED, NULL);
+            return true;
+        }
+        desk_http_state_t state = {0};
+        state.revision = dispatcher->core->revision;
+        state.content = dispatcher->core->content;
+        if (!dispatcher->hooks.read_display_on_ui(dispatcher->hooks.context,
+                                                  &state.display) ||
+            !desk_content_valid(&state.display)) {
+            dispatcher->hooks.on_status(dispatcher->hooks.context,
+                                        item.channel, item.peer_token,
+                                        DESK_RENDER_ERROR, NULL);
+            return true;
+        }
+        state.hardware_validated = false; /* Only hardware can attest validation. */
+        dispatcher->hooks.on_status(dispatcher->hooks.context,
+                                    item.channel, item.peer_token, DESK_OK, &state);
+        return true;
+    }
+
     const desk_result_t result =
         desk_core_apply(dispatcher->core, &item.command, currently_authorized);
     if (dispatcher->hooks.on_result != NULL) {
