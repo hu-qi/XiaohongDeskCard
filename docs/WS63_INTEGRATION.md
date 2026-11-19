@@ -182,3 +182,15 @@ python3 tools/ws63_preflight.py --root /path/to/openharmony --json
 新模块 `firmware/core/desk_reply_mailbox.[ch]` 负责 ACK / 状态响应的有限容量拷贝与原连接标识关联；满队列不会覆盖旧响应，必须由平台实现限流、超时和状态对账。浏览器模拟器已使用真实 C99 请求 FIFO 和回传 mailbox，真实 HTTP/GATT/SSAP worker 与 CMSIS 消息队列尚待 SDK 编译。
 
 详见 [UI_MESSAGE_BRIDGE.md](UI_MESSAGE_BRIDGE.md)。移植源码暂存包现为 **11 个 C 源文件 + 11 个头文件**。
+
+
+## Gate B 最新进度：GN 安全集成与全量实库编译
+
+已完成 [GN 上游集成指南](docs/WS63_GN_INSTALL.md) 与 `tools/ws63_gn_integrate.py`：
+
+- 首次真正有 WS63 SDK 时，可根据完整 vendor commit SHA 检查 `static_library("xiaohong")` 和 `config_lvgl_enable`，默认**只读展示 diff**。
+- 手动审核后显式使用 `--apply`，才会将完整 12 C + 12 H 复制到上游 `src/deskcard` 并原子修改 `BUILD.gn`；有未提交的上游改动、源码包 SHA-256 不匹配或 GN 结构不符合预期都会拒绝。
+- CI 额外以实际 **LVGL 8.3.11 和 LVGL 9.3.0 + ARM CMSIS 官方头文件**分别编译整个 12 C 软件包并执行 GUI/NV/GET/ACK 全栈宿主机集成测试。
+
+**尚无 WS63 真实 SDK `hb build`、GATT/SSAP/HTTP 板级服务或可烧录产物。** App 已由用户在 HarmonyOS 7 真机独立启动过，但无需现在再次运行、烧录或联调。
+
