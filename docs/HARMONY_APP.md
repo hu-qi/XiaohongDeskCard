@@ -97,3 +97,12 @@ apps/harmony/
 `DeskRouter.ts`：只有连接或读取状态失败（尚未发送写入）时，才能按顺序切换 SLE → BLE → Wi-Fi。若调用 `setContent()` 后出现超时、断连、ACK 丢失，则抛出 `DeskOutcomeUnknownError`，**不会在另一无线通道盲目重发**；需先读取设备的最新 revision/content 进行人工或显式的状态核对。明确的业务拒绝（如 CONFLICT）同样不能被当成无线失败重试。
 
 该路由器本身由 Node 22 对真实 TypeScript 源文件执行单测（不用复制一份模拟逻辑）。ArkUI 页面新增“自动选择链路 · Mock”按钮，仅用于验证能力选择和回退，并不是实际手机三模直连。真实连接、鉴权、STATUS/ACK 以及 DevEco HAP 编译仍在 Issue #7 验收范围内。
+
+
+## Gate A 首次用户协助：只编译 Debug HAP，不运行
+
+现在已具备进行**第一次真正 DevEco ArkTS 编译诊断**的必要工程骨架。此项工作无法由目前的 GitHub Actions 代替，已编写 [HAP_BUILD_HANDOFF.md](HAP_BUILD_HANDOFF.md)。
+
+在 DevEco Studio 中仅导入 `apps/harmony`、Sync，并选择 **Build Hap(s)**。收集 IDE/SDK 版本、Git HEAD SHA、Build Output 首条有效错误和任务总结，不上传签名私钥或真实 Token。
+
+**目前不需要连接 HarmonyOS 7 手机，不要求运行 App，也不要求小鸿 AI 固件烧录。** 如果 Build 失败，先针对真实 ArkTS 和 Kit SDK 类型声明修正后，再进行后续运行与联调。
