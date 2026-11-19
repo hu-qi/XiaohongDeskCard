@@ -111,3 +111,13 @@
 - [x] 30,000 组正常/畸形 JSON 输入压力测试，纳入 CTest/UBSan
 - [x] 桌面 HTTP 模拟器的 Wi-Fi 更新已走真正 C99 JSON → Wi-Fi Ingress → UI Dispatcher → ACK
 - [ ] 真实 WS63 Wi-Fi HTTP socket/server、GET 状态快照、认证/TLS、ACK 任务队列及 SDK 编译，未执行
+
+
+### 本轮完成：UI 状态读取与通信响应桥接
+
+- [x] Wi-Fi GET 与所有 SET 指令共用同一个 FIFO；快照只由 UI owner task 读取
+- [x] GET/PUT 执行前再次核验连接授权；权限撤销后的 GET 不返回任何桌牌内容
+- [x] 已保存内容与最后成功显示内容分离，渲染失败时可通过状态接口发现差异
+- [x] C99 `desk_reply_mailbox`：BLE/SLE/Wi-Fi 响应固定容量、连接 token 对应、消息满丢弃诊断、不覆盖旧回复
+- [x] 桌面模拟器 GET/PUT 和 BLE/SLE Mock 均通过同一 UI 队列和回应邮箱
+- [ ] 真实 SDK 接入 CMSIS 事件通知、socket/无线发送工作队列与 backpressure；固件及 HAP 编译未完成
