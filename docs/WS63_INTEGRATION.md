@@ -159,3 +159,17 @@ python3 tools/ws63_preflight.py --root /path/to/openharmony --json
 人工审查后，才将对应源文件放入 `vendor/atomgit/xiaohong/xiaohong/src/deskcard/`，在 `static_library("xiaohong")` 中加入基础核心文件，并把 LVGL 显示文件放入已有的 `if (config_lvgl_enable)` 条件块。随后还必须补真实 OS/NV/BLE/SLE/Wi-Fi 板级适配，才能尝试 `hb build`。
 
 这是准备 SDK 编译的产物，**并不是可直接刷机的固件**。
+
+
+## 十、Wi-Fi HTTP 新增的设备端协议层
+
+当前无需真机，已新增两个可移植 C99 模块：
+
+- `firmware/core/desk_http_json.[ch]`：严格解析 1—1024B JSON、UTF-8 与 `\\uXXXX` 代理对；拒绝重复/未知字段、非法整数和截断请求；编码统一 GET 状态与 PUT 业务结果。
+- `firmware/core/desk_wifi_ingress.[ch]`：已认证 HTTP 请求进入同一个 `DESK_CHANNEL_WIFI` Dispatcher；按 requestId 校验执行后业务 ACK。
+
+宿主机模拟器当前 Wi-Fi 入口已通过这套真实 C99 路径，而非直接调用 `desk_core_apply`。已加入大量非法 JSON 输入与权限撤销/队列满测试。
+
+上游实际 Wi-Fi 服务仍需：**HTTP Server/socket 回调、令牌/所有权校验、GET 读取 owner task 快照、PUT 异步等待并匹配 ACK、结果/超时响应、TLS 与凭据安全**。在不同 Xiaohong SDK 分支，HTTP Server 实现目录可能变化，不能根据示例直接推断已集成。
+
+详见 [WIFI_HTTP_INTEGRATION.md](WIFI_HTTP_INTEGRATION.md)。`tools/ws63_overlay.py` 已将新增 Wi-Fi 模块纳入移植包：现在是 **10 C + 10 H**，需在实际 `BUILD.gn` 审核后编译。
