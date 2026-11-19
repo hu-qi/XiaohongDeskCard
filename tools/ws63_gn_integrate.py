@@ -19,7 +19,10 @@ import subprocess
 import sys
 import tempfile
 
-from ws63_overlay import CORE_SOURCES, CORE_HEADERS, UI_SOURCES, UI_HEADERS
+try:
+    from .ws63_overlay import CORE_SOURCES, CORE_HEADERS, UI_SOURCES, UI_HEADERS
+except ImportError:  # Direct CLI invocation: python3 tools/ws63_gn_integrate.py
+    from ws63_overlay import CORE_SOURCES, CORE_HEADERS, UI_SOURCES, UI_HEADERS
 
 VENDOR = Path("vendor/atomgit/xiaohong")
 BUILD = VENDOR / "xiaohong/BUILD.gn"
@@ -87,8 +90,9 @@ def patch_build_gn(original: str) -> str:
         raise ValueError("Partial/ambiguous DeskCard GN injection; review manually")
 
     target_pattern = r'^\s*static_library\(\s*"xiaohong"\s*\)\s*\{'
-    _, target_end = _find_scope(original, target_pattern, 0, len(original))
-    target_start = original.index('{', original.index('static_library("xiaohong")'))
+    target_start, target_end = _find_scope(
+        original, target_pattern, 0, len(original)
+    )
     target_text = original[target_start:target_end]
     if not re.search(r'(?m)^\s*sources\s*(?:\+?=)', target_text):
         raise ValueError("Target has no sources list to extend")
