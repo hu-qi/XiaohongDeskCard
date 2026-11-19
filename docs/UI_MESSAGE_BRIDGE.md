@@ -75,3 +75,31 @@ ctest --test-dir build --output-on-failure
 5. 完成 DevEco HAP 与 WS63 的真正编译和板卡适配。
 
 **这仍不是可烧录固件**。需要编译固件或运行手机 App 时，另向用户明确告知工具链、源码 SHA、构建命令和需要提供的日志；目前暂时不需要实机操作。
+
+
+## 多通信任务消费修正：定向领取与断连清理
+
+早期 `desk_reply_pop()` 仅能用于**单一响应分发任务**。若 BLE、SLE、HTTP 三个 worker 分别直接 pop 同一队列，可能由错误 worker 先取走别的连接的响应，导致 ACK 丢失和 HTTP 超时。
+
+现已提供：
+
+```c
+/* 某个 BLE worker：只领取匹配本连接 generation 的回复。 */
+desk_reply_item_t item = {0};
+if (desk_reply_take_for(&mailbox, DESK_CHANNEL_BLE, my_peer_token, &item)) {
+    /* 发送前仍需检查本连接是否存活、绑定未撤销，
+     * ACK 的 requestId 是否匹配正在等待的业务请求。 */
+}
+
+/* 连接关闭：先让连接 generation 失效，后清空剩余响应。 */
+disconnect_generation_in_platform_state();
+(void)desk_reply_discard_peer(&mailbox, DESK_CHANNEL_BLE, my_peer_token);
+```
+
+`desk_reply_take_for` 在持锁时扫描最多 4 项，取出**同通道/同连接 token 的最早响应**，保留其他连接的队列顺序；中间位置删除时压紧环形队列并清零空闲存储位。BLE 和 SLE 即便碰巧使用相同 token，也不能互相消费。
+
+`desk_reply_discard_peer` 只删除指定通道和 token 的未领取回复，用于断连释放容量。**它不能撤销已经提交至 Desk Core 的命令，更不能撤回另一任务已经领取的响应**；接收线程在发送前仍必须进行当前连接代际和所有权校验。
+
+新增 `desk_reply_demux_tests` 覆盖：SLE worker 在 BLE 前运行、错误 token 读取、邮箱满载、中间元素删除、环形回绕、同 token 跨通道、一个连接两条响应断连同时清理、空闲槽敏感字段清零。桌面模拟器现在使用 `take_for`，不再用无目标的全局 `pop`。
+
+**仍待 SDK 绑定：** 真实连接 generation 来源、各通信 worker 唤醒与等待模型、CMSIS mutex，以及发送前再次校验 session。主机测试并未模拟多核真正同时运行的所有时序。
