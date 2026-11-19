@@ -41,3 +41,48 @@ endif()
 
 enable_testing()
 add_test(NAME desk_lvgl_real_v8_tests COMMAND test_lvgl_real)
+
+# Gate B: compile the ENTIRE portable 12-source firmware overlay against
+# real LVGL v8/v9 plus unmodified ARM CMSIS-RTOS2 public headers.
+# Mocked board callbacks simulate NV and radio/OS only: no WS63 SDK link.
+if(DEFINED DESK_CMSIS_HEADER_DIR AND DEFINED DESK_CMSIS_CORE_HEADER_DIR)
+    if(NOT EXISTS "${DESK_CMSIS_HEADER_DIR}/cmsis_os2.h")
+        message(FATAL_ERROR "DESK_CMSIS_HEADER_DIR must contain official cmsis_os2.h")
+    endif()
+    add_library(desk_ws63_bundle_real STATIC
+        ../../firmware/core/src/desk_core.c
+        ../../firmware/core/src/desk_wire.c
+        ../../firmware/core/src/desk_packet.c
+        ../../firmware/core/src/desk_dispatcher.c
+        ../../firmware/core/src/desk_radio_ingress.c
+        ../../firmware/core/src/desk_nv_store.c
+        ../../firmware/core/src/desk_http_json.c
+        ../../firmware/core/src/desk_wifi_ingress.c
+        ../../firmware/core/src/desk_reply_mailbox.c
+        ../../firmware/display/desk_view_lvgl.c
+        ../../firmware/platform/ws63/desk_ws63_glue.c
+        ../../firmware/platform/ws63/desk_ws63_cmsis.c)
+    target_include_directories(desk_ws63_bundle_real PUBLIC
+        ../../firmware/core/include
+        ../../firmware/display
+        ../../firmware/platform/ws63
+        "${DESK_CMSIS_HEADER_DIR}"
+        "${DESK_CMSIS_CORE_HEADER_DIR}")
+    target_link_libraries(desk_ws63_bundle_real PUBLIC lvgl)
+    set_target_properties(desk_ws63_bundle_real PROPERTIES
+        C_STANDARD 99 C_STANDARD_REQUIRED YES)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(desk_ws63_bundle_real PRIVATE
+            -Wall -Wextra -Werror -Wpedantic)
+    endif()
+
+    add_executable(test_ws63_real_stack test_ws63_real_stack.c)
+    target_link_libraries(test_ws63_real_stack PRIVATE desk_ws63_bundle_real)
+    set_target_properties(test_ws63_real_stack PROPERTIES
+        C_STANDARD 99 C_STANDARD_REQUIRED YES)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(test_ws63_real_stack PRIVATE
+            -Wall -Wextra -Werror -Wpedantic)
+    endif()
+    add_test(NAME desk_ws63_real_lvgl_cmsis_stack COMMAND test_ws63_real_stack)
+endif()
