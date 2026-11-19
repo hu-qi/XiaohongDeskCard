@@ -196,3 +196,14 @@ python3 tools/ws63_overlay.py --output build/ws63-overlay
 [UI GET/SET 与回传队列规范](docs/UI_MESSAGE_BRIDGE.md) · [SDK 编译 Gate](https://github.com/hu-qi/XiaohongDeskCard/issues/7)。
 
 **仍未进行真实 WS63 SDK 固件构建或 HarmonyOS HAP 编译，尚不能要求用户烧录或运行 App。**
+
+
+## 2026-11-19 · 三模回传连接隔离
+
+`desk_reply_mailbox` 新增 `desk_reply_take_for(channel, peer_token)` 与 `desk_reply_discard_peer(channel, peer_token)`。在 BLE、SLE 和 Wi-Fi 各自拥有工作线程的情况下，任何线程都不会取走别的连接的业务 ACK；断连后只清理自身的待发结果。
+
+`tests/test_reply_demux.c` 新增错误连接、乱序消费、环形队列回绕、跨通道相同 token、断连多消息清理及敏感字段清空验证。桌面模拟器已改为定向领取 ACK / GET 状态。
+
+[三模 UI 与通信任务模型](docs/UI_MESSAGE_BRIDGE.md) · [SDK 实际编译门槛](https://github.com/hu-qi/XiaohongDeskCard/issues/7)。
+
+**这是 C99 软件隔离验证，不代表 WS63 BLE/SLE/HTTP 工作线程已编译或 HAP 已运行。**
