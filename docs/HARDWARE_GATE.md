@@ -121,3 +121,11 @@
 - [x] C99 `desk_reply_mailbox`：BLE/SLE/Wi-Fi 响应固定容量、连接 token 对应、消息满丢弃诊断、不覆盖旧回复
 - [x] 桌面模拟器 GET/PUT 和 BLE/SLE Mock 均通过同一 UI 队列和回应邮箱
 - [ ] 真实 SDK 接入 CMSIS 事件通知、socket/无线发送工作队列与 backpressure；固件及 HAP 编译未完成
+
+
+### 回传队列并发消费修复
+
+- [x] BLE、SLE、Wi-Fi 工作线程按 `channel + peer_token` 定向领取业务 ACK / 状态响应
+- [x] 断连后定向清除该连接剩余回复，不误删其他连接或其他无线模式使用的同号 token
+- [x] 多任务乱序、容量上限、环形队列回绕与空闲消息清零测试
+- [ ] 真实 WS63 SDK 的 BLE/SLE/HTTP worker 调用 `desk_reply_take_for`，并在实际发送前复核当前 generation（需要 SDK 编译；尚未开始）
