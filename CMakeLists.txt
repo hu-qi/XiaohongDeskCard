@@ -46,6 +46,10 @@ add_executable(test_http_json tests/test_http_json.c)
 target_link_libraries(test_http_json PRIVATE desk_core)
 add_test(NAME desk_http_json_tests COMMAND test_http_json)
 
+add_executable(test_http_json_fuzz tests/test_http_json_fuzz.c)
+target_link_libraries(test_http_json_fuzz PRIVATE desk_core)
+add_test(NAME desk_http_json_fuzz_tests COMMAND test_http_json_fuzz)
+
 add_executable(test_wifi_ingress tests/test_wifi_ingress.c)
 target_link_libraries(test_wifi_ingress PRIVATE desk_core)
 add_test(NAME desk_wifi_ingress_tests COMMAND test_wifi_ingress)
