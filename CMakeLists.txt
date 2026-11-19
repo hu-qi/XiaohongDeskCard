@@ -142,6 +142,12 @@ if(Python3_Interpreter_FOUND)
 endif()
 
 if(Python3_Interpreter_FOUND)
+    add_test(NAME harmony_signing_safety
+        COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests -p test_harmony_signing_safety.py
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+endif()
+
+if(Python3_Interpreter_FOUND)
     add_test(NAME harmony_stage_structure
         COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests -p test_harmony_structure.py
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
