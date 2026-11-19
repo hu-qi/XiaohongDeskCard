@@ -150,3 +150,19 @@ python3 tools/ws63_overlay.py --output build/ws63-overlay
 **重要区别**：桌面模拟器 `GET /api/v1/desk/status` 为了本机网页预览允许未鉴权读取；它只能监听 localhost，不能当作真实设备服务器部署。正式 WS63 HTTP GET 必须鉴权。
 
 进入 [Issue #7：实际 SDK 编译](https://github.com/hu-qi/XiaohongDeskCard/issues/7) 时才需要绑定真正的 HTTP Server、Wi-Fi 初始化、TLS/认证、LVGL 状态快照和 ACK 队列。烧录与手机实测仍保留在 [Issue #8](https://github.com/hu-qi/XiaohongDeskCard/issues/8)。
+
+
+## 6. 已实现：GET 排队与跨任务响应邮箱
+
+原先 GET 状态快照只有协议设计，现在已经有可移植的 **`desk_wifi_submit_get()` + `desk_dispatcher_submit_status()` + `desk_reply_mailbox`**：
+
+- HTTP GET 通过已验证的设备认证后，进入**同一条** GET/PUT/BLE/SLE Dispatcher FIFO。
+- 仅 LVGL/UI owner task 执行状态快照，读取 `desk_core_t.content` 与最近一次成功渲染的 `display`，GET 的响应经 `enqueue_status` 入回传队列。
+- 执行前再次核验当前连接代际与设备所有权。已排队的未授权 GET 只能返回无内容的 `UNAUTHORIZED`，不能泄露姓名/组织。
+- UI 任务上的 `desk_reply_mailbox` 接收业务 ACK / GET 快照，通讯 worker 之后通过 `channel + peer_token + requestId` 核对目标。队列满不可宣称写入失败或成功，只能将客户端结果视为未知并进行状态对账。
+- 桌面 HTTP 模拟器现在连 GET 也经过这一队列和 mailbox，不再直接读取 Desk Core 的可变字段。
+- CTest 新增 `desk_status_fifo_tests` 与 `desk_reply_mailbox_tests`，包含 GET→PUT→GET 顺序、权限撤销、渲染错误、消息覆盖/背压和 ACK 关联。
+
+完整细节：[UI 与三模消息桥接](UI_MESSAGE_BRIDGE.md)。
+
+**真实 WS63 HTTP socket/listener、配对令牌、可靠 UI 唤醒、有限输出队列与 TLS 依然需要 SDK 对接与实际编译。**
