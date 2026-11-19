@@ -63,6 +63,10 @@ add_executable(test_reply_mailbox tests/test_reply_mailbox.c)
 target_link_libraries(test_reply_mailbox PRIVATE desk_core)
 add_test(NAME desk_reply_mailbox_tests COMMAND test_reply_mailbox)
 
+add_executable(test_reply_demux tests/test_reply_demux.c)
+target_link_libraries(test_reply_demux PRIVATE desk_core)
+add_test(NAME desk_reply_demux_tests COMMAND test_reply_demux)
+
 add_executable(test_nv_store tests/test_nv_store.c)
 target_link_libraries(test_nv_store PRIVATE desk_core)
 add_test(NAME desk_nv_store_tests COMMAND test_nv_store)
