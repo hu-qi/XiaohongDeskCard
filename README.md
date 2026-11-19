@@ -242,3 +242,19 @@ WS63 待审查源码包更新为 **12 C + 12 H**，包含 CMSIS 事件适配层�
 
 **尚无 WS63 真实 SDK `hb build`、GATT/SSAP/HTTP 板级服务或可烧录产物。** App 已由用户在 HarmonyOS 7 真机独立启动过，但无需现在再次运行、烧录或联调。
 
+
+
+## Gate B · 真实 WS63 SDK 版本探测（只读）
+
+现有可移植 12 C + 12 H 已在真实 LVGL 8.3/9.3 与 ARM CMSIS 头文件下完成宿主机编译，但**当前缺少真实第一代小鸿 OpenHarmony SDK 源码树，尚未执行 hb build**。
+
+新增 `tools/ws63_sdk_probe.py` 用于核实实际 vendor commit、GN/LVGL/显示事件、HTTP/Flash/无线候选源码，不修改 SDK、不会采集密码或复制源码正文：
+
+```bash
+# 若电脑已有 OpenHarmony 源码树
+python3 tools/ws63_sdk_probe.py \
+  --root /path/to/openharmony \
+  --output build/ws63-sdk-probe.json
+```
+
+提供探测报告前请自行检查隐私信息。完整命令和用途见 [Gate B SDK 证据采集指南](docs/WS63_SDK_EVIDENCE.md)。目前**不需要编译固件、重新运行手机 App 或真机联调**。
