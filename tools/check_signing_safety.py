@@ -30,7 +30,7 @@ NONEMPTY_CONFIGS = re.compile(
     re.IGNORECASE,
 )
 LOCAL_PATH = re.compile(
-    r'(?i)(/Users/|/home/[^/"\s]+/\.ohos/|[A-Z]:[\\/]Users[\\/])'
+    r'(?i)(/Users/|/home/[^/"\s]+/\.ohos/|[A-Z]:/Users/)'
 )
 
 
@@ -38,7 +38,7 @@ def is_safe_shared_config(source: str) -> bool:
     return not (
         SENSITIVE_FIELD.search(source)
         or NONEMPTY_CONFIGS.search(source)
-        or LOCAL_PATH.search(source)
+        or LOCAL_PATH.search(re.sub(r"[\\/]+", "/", source))
     )
 
 
