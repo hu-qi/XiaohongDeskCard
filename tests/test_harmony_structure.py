@@ -28,6 +28,19 @@ class HarmonyStructureTests(unittest.TestCase):
             module = json.load(file)["module"]
         self.assertEqual(module["mainElement"], "EntryAbility")
         self.assertEqual(module["type"], "entry")
+        entry_ability = module["abilities"][0]
+        self.assertEqual(entry_ability["startWindowIcon"], "$media:app_icon")
+        self.assertEqual(
+            entry_ability["startWindowBackground"],
+            "$color:start_window_background",
+        )
+        with (ROOT / "entry/src/main/resources/base/element/color.json").open(
+            encoding="utf-8"
+        ) as file:
+            colors = json.load(file)["color"]
+        self.assertIn(
+            {"name": "start_window_background", "value": "#FFFFFF"}, colors
+        )
         permissions = {p["name"] for p in module["requestPermissions"]}
         self.assertIn("ohos.permission.INTERNET", permissions)
         self.assertIn("ohos.permission.ACCESS_BLUETOOTH", permissions)
@@ -64,6 +77,8 @@ class HarmonyStructureTests(unittest.TestCase):
         self.assertIn("DeskPermissions.request", page)
         self.assertIn("new DeskDeviceDiscovery", page)
         self.assertIn("扫描星闪设备", page)
+        self.assertIn("(_error: Error) => {}", page)
+        self.assertNotIn("(_error) => {}", page)
 
     def test_api_generation(self):
         nearlink = (ROOT / "entry/src/main/ets/desk/NearLinkCapability.ets").read_text(
@@ -79,6 +94,11 @@ class HarmonyStructureTests(unittest.TestCase):
         self.assertIn("setPropertyNotification", sle)
         self.assertIn("sendFrameAwaitAck", sle)
         self.assertIn("setCharacteristicChangeNotification", ble)
+        discovery = (ROOT / "entry/src/main/ets/desk/DeskDeviceDiscovery.ets").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("throw new Error(String(err))", discovery)
+        self.assertNotIn("throw err;", discovery)
         self.assertIn("sendFrameAwaitAck", ble)
 
     def test_ack_and_service_ids(self):
