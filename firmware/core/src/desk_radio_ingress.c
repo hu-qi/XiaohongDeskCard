@@ -59,7 +59,8 @@ desk_radio_result_t desk_radio_link_receive(desk_radio_link_t *link,
         link->channel,
         link->peer_token,
         true,  /* authorization snapshot taken at accepted COMMIT */
-        decoded
+        decoded,
+        false
     };
     const desk_dispatch_status_t status =
         desk_dispatcher_submit(link->dispatcher, &item);
