@@ -1,90 +1,77 @@
-# Desk Protocol v0.1 · 三模统一业务协议（草案）
+# XiaohongDeskCard 协议 v1 · BLE / SLE / Wi-Fi 统一桌牌业务
 
-设计目标：**同一条桌牌业务命令**可以通过 BLE GATT、SLE SSAP 或 Wi-Fi HTTP 到达同一个 Desk Core。此处描述目标协议，不宣称已在小鸿设备实现。
+**状态：C99 软件协议、模拟器及 Host CI 已实现。真实 WS63 BLE/SLE/HTTP 服务端与 HarmonyOS HAP 尚未通过 SDK 编译。**
 
-## 1. 业务模型
+## 1. 同一业务数据模型
+
+所有通道最终交给同一个 `desk_set_command_t` / `Desk Core`：
 
 ```json
 {
-  "version": 1,
-  "requestId": "req-0001",
-  "op": "desk.setContent",
-  "expectedRevision": 0,
-  "payload": {
+  "requestId": 55,
+  "expectedRevision": 1,
+  "content": {
     "name": "张三",
     "title": "技术负责人",
     "organization": "OpenHarmony 社区",
-    "template": "classic"
+    "theme": "classic"
   }
 }
 ```
 
-- `requestId`：用于 ACK 关联和重试去重（相同 requestId + 相同内容返回已有结果）。
-- `expectedRevision`：乐观并发控制；不匹配时拒绝覆盖，客户端应先刷新状态。首次配置时由客户端读取设备 revision，不默认无限覆盖。
-- `version`：协议版本，当前为 1。
-- `op`：初期允许 `desk.getStatus`、`desk.setContent`、`desk.getContent`。
-- 字段长度、最大报文大小、字体可用字符集等界限需根据固件 RAM 和中文字库实测后定稿；收到非法或过大输入必须拒绝而非截断溢出。
+- `requestId`：1 至 4294967295 的无符号整数，不是字符串；与业务 ACK 关联。
+- `expectedRevision`：uint32，乐观并发版本；不同传输共用一份设备 revision。
+- `content`：四个**必填**字符串，UTF-8 字节上限依次为姓名 48、职位 64、组织 96、主题 16。职位与组织允许空字符串。
+- `theme`：`classic` / `modern` / `minimal`。
+- 保存成功前不修改状态；保存、LVGL 渲染完成后再生成业务结果。失败可由业务 ACK 确认。
 
-## 2. 结果事件
+当前 Desk Core 仅记住 RAM 中最后一笔请求。跨重启防重放、配对/绑定及安全凭据存储还需要 WS63 平台支持。
 
-```json
-{
-  "version": 1,
-  "requestId": "req-0001",
-  "status": "APPLIED",
-  "revision": 1,
-  "transport": "sle",
-  "error": null
-}
-```
+## 2. 三模各自的传输方式
 
-`status` 建议为 `RECEIVED`、`VALIDATED`、`APPLIED`、`PERSISTED`、`REJECTED`。对于 UI 成功，应以实际渲染结果为准；持久化失败必须单独上报。注：状态字段和转移尚需通过设备端实现核对。
+| 通道 | 客户端 | 设备端 | 共同的最终处理 |
+|---|---|---|---|
+| BLE GATT | HarmonyOS GATT Central | WS63 GATT Server（SDK 待接入） | C99 分包 → Desk Dispatcher |
+| SLE SSAP | HarmonyOS NearLink Client | WS63 SSAP Server（SDK 待接入） | 同一套 C99 分包 → Desk Dispatcher |
+| Wi-Fi HTTP | HarmonyOS NetworkKit | WS63 HTTP Server（SDK 待接入） | C99 严格 JSON → Desk Dispatcher |
 
-## 3. 传输层
+BLE/SLE 用二进制帧与 BEGIN/CHUNK/COMMIT，并通过特征/属性通知发送 **16 字节业务 ACK**。定义与暂定 UUID 详见 [WIRE_V1.md](WIRE_V1.md)。
 
-### Wi-Fi HTTP
+Wi-Fi 采用：
 
-- `GET /api/v1/desk/status`
-- `PUT /api/v1/desk/content`
-- 在完成设备认领后使用设备侧有效的鉴权凭据。
-- JSON Body 直接携带业务模型。HTTP 成功只表示请求被受理，页面更新是否完成应按结果或状态确认。
+- `GET /api/v1/desk/status`：授权后读取 owner task 的内容快照；
+- `PUT /api/v1/desk/content`：授权后提交上述 JSON，正文最多 1024 字节；
+- 符合 `DeskAck` 的响应格式：`{"result":"OK","transport":"WIFI_HTTP","state":{...}}`。
 
-### BLE GATT
+完整的 Wi-Fi JSON 校验、HTTP 状态/错误映射、令牌要求、UI ACK 时序与测试范围详见 [WIFI_HTTP_INTEGRATION.md](WIFI_HTTP_INTEGRATION.md)。
 
-- WS63：Peripheral/GATT Server；App：Central/GATT Client。
-- 拟定义 Control（write）、Data（write）、Status（notify/read）特征；**UUID 待实际服务表确定后冻结**。
-- 使用实际协商出的 ATT MTU 计算可用负载，不写死单包大小。
-- 应用层完成 BEGIN → CHUNK → COMMIT → ACK；顺序号、长度、CRC32 和超时用于确保整包可靠性。
-- 在绑定与权限检查完成前禁止执行变更。
+## 3. 一致性与安全规则
 
-### SLE SSAP
+1. **单一版本号**：三模共用 `desk_core_t.revision`。写入前必须提供当前期望 revision，冲突返回 CONFLICT。
+2. **同一 owner task**：三条通道只负责收包、授权和入队；保存 Flash、LVGL 更新必须串行处理。
+3. **二次授权复核**：请求入队后到实际执行之间，必须再次确认连接代际与设备所有权。权限撤销时返回 UNAUTHORIZED，不更新。
+4. **业务 ACK，而非无线确认**：GATT/SSAP 写入或 HTTP 数据读取成功不代表桌牌已显示。只有 UI 任务确认后才能报告结果。
+5. **安全回退**：SLE → BLE → Wi-Fi 的自动回退仅限**开始写入之前**。若数据已发送但 ACK 超时，结果未知，先重新读状态，不跨通道盲目重发。
+6. **隐私与鉴权**：生产 Wi-Fi GET 和 PUT 均必须鉴权。CRC32 只检测误码，不能替代配对、绑定、TLS 或抗重放机制。
+7. **固定内存上限**：BLE/SLE 单帧最大 384B；Wi-Fi JSON 最大 1024B；总入队容量固定。超限返回错误，不执行部分写入。
 
-- WS63：SLE SSAP Server；ArkTS：SSAP Client。
-- 采用与 BLE 相同的 BEGIN/CHUNK/COMMIT/ACK 业务状态机，由 SSAP 属性承载数据与响应。
-- SSAP 服务/属性 UUID、可写长度、是否支持 notify 需依据 WS63 SDK 和 HarmonyOS NearLink Kit **实测后固定**。
-- 现成 `13_sle_uart` 只能证明双小鸿透传案例存在，不能证明手机已能直接调用其服务。
+## 4. 业务结果
 
-## 4. 分片状态机
+| Result | 含义 |
+|---|---|
+| OK | 已完成当前请求（或完全相同的最近请求重绘） |
+| BAD_INPUT | JSON/UTF-8/字段/长度无效 |
+| UNAUTHORIZED | 未授权或执行时绑定已撤销 |
+| CONFLICT | expectedRevision 不匹配 |
+| DUPLICATE_ID | 最近相同 requestId 与内容不一致 |
+| STORE_ERROR | 持久化失败 |
+| RENDER_ERROR | 保存后显示失败，需读取当前状态 |
+| REVISION_EXHAUSTED | Revision 达到 uint32 最大值 |
 
-```text
-IDLE ─BEGIN(length, crc32, requestId)→ RECEIVING
-RECEIVING ─CHUNK(seq, bytes)→ RECEIVING
-RECEIVING ─COMMIT→ VERIFYING
-VERIFYING ─valid→ APPLYING → ACK(APPLIED) → IDLE
-VERIFYING ─invalid→ NACK / RESET → IDLE
-RECEIVING ─timeout/disconnect→ RESET → IDLE
-```
+`GET status` 响应同时携带 `content`（已保存配置）与 `display`（最后成功渲染内容），两者在异常情况下可不同。
 
-建议初期仅允许一笔未完成的分片事务；缓冲区上限明确，不足时拒绝而不是动态无限申请。重传同序号必须可识别，不能重复拼接。CRC32 只作误码检测，不替代鉴权和加密。
+## 5. 验证与剩余工作
 
-## 5. 安全/一致性
+已在 GitHub Actions 对 C99 Desk Core、BLE/SLE 分包、Wi-Fi JSON、NV 双槽、统一队列、LVGL 真实库（8/9）进行电脑端测试。模拟器的 BLE/SLE/Wi-Fi 都使用同一套 C99 设备端业务逻辑，**没有实际无线通信或可烧录镜像**。
 
-- Wi-Fi：不允许匿名局域网写入；至少设备认领令牌 + 重放防护；上线远程能力需 TLS。
-- BLE/SLE：链路层安全之外增加业务层授权；首次绑定可采用设备屏显一次性配对码。
-- 设备状态 `revision` 单调递增；不同传输更新统一序列化，避免交叉覆盖。
-- 所有输入须验证 UTF-8、大小限制、模板白名单；日志不得输出完整令牌。
-- 未授权、分片校验失败、expectedRevision 冲突都不能修改已显示与持久化内容。
-
-## 6. 未来兼容
-
-后期电子纸屏幕只增加 Renderer/Display Adapter；Protocol 与 Transport 不变。若升级为大图片帧传输，另定义 `desk.pushFrame`，不要借用小文本指令的内存与传输上限。
+下一阶段 [#7 SDK 无实机编译](https://github.com/hu-qi/XiaohongDeskCard/issues/7)；最后才进入 [#8 小鸿 AI + HarmonyOS 7 真机验收](https://github.com/hu-qi/XiaohongDeskCard/issues/8)。
