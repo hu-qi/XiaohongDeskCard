@@ -2,7 +2,7 @@
 
 ## 目标与当前边界
 
-本仓库的 `apps/harmony` 已放入**完整的 Stage 工程配置结构、入口 Ability、ArkUI 编辑页及三通道源文件**；但未执行 DevEco Studio / Hvigor / ArkTS 编译，也**不保证首次导入就能直接产出 HAP**。SDK 与图标资源等仍需在实际 DevEco 环境检查。
+本仓库的 `apps/harmony` 已包含 Stage 工程、入口 Ability、ArkUI 编辑页及三通道源文件。**开发者已在 2026-11-19 使用 DevEco Studio 和 SDK 6.0.2(22) 成功构建 Debug HAP，在 HarmonyOS 7 真机安装并启动**。实际修复了 SDK 22 启动窗口资源、ArkTS 严格类型及本地签名绑定；详见 [Gate A 验证记录](HAP_GATE_A_REPORT.md)。这不代表 BLE/SLE/Wi-Fi 与小鸿 AI 固件已联通。
 
 工程配置以项目现有 [Goodtime 鸿蒙化工程](https://github.com/hu-qi/goodtime/tree/harmonyos) 的 `6.0.2(22)` 构建模型为参考。
 
@@ -72,22 +72,22 @@ apps/harmony/
 
 ## 安全说明
 
-`module.json5` 已声明 INTERNET、ACCESS_BLUETOOTH、ACCESS_NEARLINK，但**声明不等于用户授权**。扫描界面源码已通过 `DeskPermissions.request` 接入运行时授权，但实际授权弹窗、拒绝处理和手机 API 行为**仍待 DevEco 编译及真机测试**。
+`module.json5` 已声明 INTERNET、ACCESS_BLUETOOTH、ACCESS_NEARLINK，但**声明不等于用户授权**。扫描界面源码已通过 `DeskPermissions.request` 接入运行时授权，但实际授权弹窗、拒绝处理和手机 API 行为**仍待专门的运行时功能测试**。
 
 模拟 HTTP 令牌只适用于本机开发。不要在不可信局域网明文发送生产令牌或把 Mock HTTP 服务公开到 Internet。
 
 ## 还缺什么？
 
-- DevEco 真正构建验证与图标等资源兼容修复。
-- BLE/SLE 扫描、权限及 ACK 已有 SDK 调用原型；仍缺 **DevEco HAP 编译验证**、完整配对/认领、真实广播、真实 ACK 和 GATT/SSAP UUID 固化。
+- DevEco 首次 Debug HAP 构建及启动资源问题已通过；后续源码改动的 DevEco 回归仍需执行。
+- BLE/SLE 扫描、权限及 ACK 已有 SDK 调用原型；**App 启动已验证**，但还缺真实运行中的完整配对/认领、设备端广播、业务 ACK 和 GATT/SSAP UUID 固化。
 - C99 设备侧 BEGIN/CHUNK/COMMIT **解析器已实现并通过宿主机测试**，但还未集成到 WS63 的 BLE/SLE 服务端和 Desk Core UI 任务。
 - 真实 WS63/LVGL 固件编译、烧录、三模共存与功耗实测。
 
 ## 当前实际测试证据
 
 - **Host CI**：C99 Core / Binary ACK / HTTP 模拟器 / Stage 结构检查，可在 GitHub Actions 查询。结构检查不会调用 ArkTS 编译器。
-- **App SDK 源码**：`DeskDeviceDiscovery`、`DeskPermissions`、`DeskAckWaiter`、`BleGattLink`、`SleSsapLink` 已提交但仍属待编译原型。
-- **用户设备**：已知有小鸿 AI 与 HarmonyOS 7 手机，但现在不需要真机操作。进入实测关卡前先完成 [#7 无实机编译验收](https://github.com/hu-qi/XiaohongDeskCard/issues/7)，再开展 [#8 真机验收](https://github.com/hu-qi/XiaohongDeskCard/issues/8)。
+- **App SDK 源码**：Stage 入口在开发者本机 DevEco 成功编译和启动；尚未接到页面入口或板端设备的 BLE/SLE Server 适配依然属于待功能验证原型。
+- **用户设备**：HarmonyOS 7 手机已完成 App 首次安装启动；当前无需再次操作手机或小鸿板卡。先推进 [#7 SDK 编译验收](https://github.com/hu-qi/XiaohongDeskCard/issues/7)，再开展 [#8 真机验收](https://github.com/hu-qi/XiaohongDeskCard/issues/8)。
 
 注意：设备扫描可以发现某个广播名称，但不能凭名称证明它是可信的 XiaohongDeskCard 设备。**设备所有权、身份验证和安全写入**必须单独实现。
 
@@ -96,13 +96,13 @@ apps/harmony/
 
 `DeskRouter.ts`：只有连接或读取状态失败（尚未发送写入）时，才能按顺序切换 SLE → BLE → Wi-Fi。若调用 `setContent()` 后出现超时、断连、ACK 丢失，则抛出 `DeskOutcomeUnknownError`，**不会在另一无线通道盲目重发**；需先读取设备的最新 revision/content 进行人工或显式的状态核对。明确的业务拒绝（如 CONFLICT）同样不能被当成无线失败重试。
 
-该路由器本身由 Node 22 对真实 TypeScript 源文件执行单测（不用复制一份模拟逻辑）。ArkUI 页面新增“自动选择链路 · Mock”按钮，仅用于验证能力选择和回退，并不是实际手机三模直连。真实连接、鉴权、STATUS/ACK 以及 DevEco HAP 编译仍在 Issue #7 验收范围内。
+该路由器本身由 Node 22 对真实 TypeScript 源文件执行单测（不用复制一份模拟逻辑）。ArkUI 页面新增“自动选择链路 · Mock”按钮，仅用于验证能力选择和回退，并不是实际手机三模直连。真实连接、鉴权、STATUS/ACK 和固件通信仍在 Issue #7 验收范围内；App 的首次 HAP 编译已完成。
 
 
-## Gate A 首次用户协助：只编译 Debug HAP，不运行
+## Gate A 首次用户协助（已完成 DevEco 编译与真机启动）
 
-现在已具备进行**第一次真正 DevEco ArkTS 编译诊断**的必要工程骨架。此项工作无法由目前的 GitHub Actions 代替，已编写 [HAP_BUILD_HANDOFF.md](HAP_BUILD_HANDOFF.md)。
+开发者已完成首次真实 DevEco 编译和手机启动；完整问题与修复见 [HAP_GATE_A_REPORT.md](HAP_GATE_A_REPORT.md)。GitHub Actions 无法重现 DevEco 原生编译。
 
-在 DevEco Studio 中仅导入 `apps/harmony`、Sync，并选择 **Build Hap(s)**。收集 IDE/SDK 版本、Git HEAD SHA、Build Output 首条有效错误和任务总结，不上传签名私钥或真实 Token。
+今后复现请在 DevEco Studio 打开 `apps/harmony`、Sync 并选择 Build Hap(s)。本地调试签名不应提交 GitHub，参见 [HARMONY_SIGNING_SECURITY.md](HARMONY_SIGNING_SECURITY.md)。
 
-**目前不需要连接 HarmonyOS 7 手机，不要求运行 App，也不要求小鸿 AI 固件烧录。** 如果 Build 失败，先针对真实 ArkTS 和 Kit SDK 类型声明修正后，再进行后续运行与联调。
+**目前无需重复运行手机 App，仍无需烧录小鸿 AI。** 下一阶段是 WS63 真实 SDK 编译，随后才验证三模设备联通。
