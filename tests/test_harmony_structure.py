@@ -101,6 +101,38 @@ class HarmonyStructureTests(unittest.TestCase):
         self.assertNotIn("throw err;", discovery)
         self.assertIn("sendFrameAwaitAck", ble)
 
+    def test_shared_profile_leaves_signing_to_local_ide(self):
+        """Shared config keeps an empty signing slot and no product reference."""
+        with (ROOT / "build-profile.json5").open(encoding="utf-8") as file:
+            profile = json.load(file)
+        app = profile["app"]
+        self.assertEqual(app["signingConfigs"], [])
+        products = {product["name"]: product for product in app["products"]}
+        self.assertNotIn("signingConfig", products["default"])
+
+    def test_nearlink_probe_waits_for_system_capability(self):
+        nearlink = (ROOT / "entry/src/main/ets/desk/NearLinkCapability.ets").read_text(
+            encoding="utf-8")
+        self.assertIn("SystemCapability.Communication.NearLink.Base", nearlink)
+        self.assertIn("canIUse(", nearlink)
+        self.assertLess(
+            nearlink.index("canIUse("), nearlink.index("manager.isNearLinkSupported()")
+        )
+
+    def test_handoff_carries_gate_evidence_tables(self):
+        handoff = (ROOT.parent.parent / "docs/HAP_BUILD_HANDOFF.md").read_text(
+            encoding="utf-8")
+        for heading in ("Gate A 回传记录表", "Gate B 回传记录表", "脱敏禁止清单"):
+            with self.subTest(heading=heading):
+                self.assertIn(heading, handoff)
+        for field in ("DevEco Studio", "hvigor", "ohpm", "Git HEAD", "SHA-256",
+                      "--oh-commit", "Automatic signing"):
+            with self.subTest(field=field):
+                self.assertIn(field, handoff)
+        for forbidden in ("keystore", "私钥", "设备号", "Token"):
+            with self.subTest(forbidden=forbidden):
+                self.assertIn(forbidden, handoff)
+
     def test_ack_and_service_ids(self):
         desk = ROOT / "entry/src/main/ets/desk"
         ack = (desk / "DeskAckFrame.ets").read_text(encoding="utf-8")
