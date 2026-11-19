@@ -15,7 +15,7 @@ desk_wifi_result_t desk_wifi_submit_put(desk_dispatcher_t *dispatcher,
         return DESK_WIFI_BAD_REQUEST;
 
     const desk_dispatch_item_t item = {
-        DESK_CHANNEL_WIFI, peer_token, true, command
+        DESK_CHANNEL_WIFI, peer_token, true, command, false
     };
     const desk_dispatch_status_t result =
         desk_dispatcher_submit(dispatcher, &item);
