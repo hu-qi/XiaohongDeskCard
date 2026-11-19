@@ -53,17 +53,31 @@ def frame_for(command: dict[str, Any]) -> bytes:
                        len(payload), zlib.crc32(payload)) + bytes(payload)
 
 
+def reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Never let Python normalization hide duplicate fields from the C codec."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key: " + key)
+        result[key] = value
+    return result
+
+
 def parse_command(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict) or not isinstance(value.get("content"), dict):
         raise ValueError("expected an object with content")
+    if set(value) != {"requestId", "expectedRevision", "content"}:
+        raise ValueError("missing or unknown command fields")
     for key in ("requestId", "expectedRevision"):
         number = value.get(key)
         if type(number) is not int or number < (1 if key == "requestId" else 0) or number > 0xFFFFFFFF:
             raise ValueError("invalid " + key)
     content = value["content"]
+    if set(content) != {"name", "title", "organization", "theme"}:
+        raise ValueError("missing or unknown content fields")
     result: dict[str, str] = {}
     for key in ("name", "title", "organization", "theme"):
-        text = content.get(key, "")
+        text = content[key]
         if not isinstance(text, str):
             raise ValueError(key + " must be a string")
         result[key] = text
@@ -205,9 +219,10 @@ def make_handler(simulator: DeskSimulator, token: str, html_path: Path):
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if not 0 < length <= 2048:
+                if not 0 < length <= 1024:
                     raise ValueError("body size exceeds limit")
-                data = json.loads(self.rfile.read(length).decode("utf-8"))
+                data = json.loads(self.rfile.read(length).decode("utf-8"),
+                                  object_pairs_hook=reject_duplicate_pairs)
                 command = parse_command(data)
                 result = simulator.submit(transport, command, True)
             except (ValueError, UnicodeError, KeyError, json.JSONDecodeError) as exc:
