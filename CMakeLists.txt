@@ -103,6 +103,18 @@ add_executable(test_ws63_glue tests/test_ws63_glue.c)
 target_link_libraries(test_ws63_glue PRIVATE desk_ws63_glue_host)
 add_test(NAME desk_ws63_glue_host_tests COMMAND test_ws63_glue)
 
+# Compile CMSIS-RTOS2 event adapter against a host-only CMSIS signature stub.
+# The actual xiaohong g_disp_event_qid is NOT linked in this host test.
+add_library(desk_ws63_cmsis_host STATIC firmware/platform/ws63/desk_ws63_cmsis.c)
+target_include_directories(desk_ws63_cmsis_host PUBLIC tests/cmsis_stub)
+target_link_libraries(desk_ws63_cmsis_host PUBLIC desk_ws63_glue_host)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(desk_ws63_cmsis_host PRIVATE -Wall -Wextra -Werror -Wpedantic)
+endif()
+add_executable(test_ws63_cmsis tests/test_ws63_cmsis.c)
+target_link_libraries(test_ws63_cmsis PRIVATE desk_ws63_cmsis_host)
+add_test(NAME desk_ws63_cmsis_host_tests COMMAND test_ws63_cmsis)
+
 # Full host integration: Flash two-slot journal -> WS63 glue -> LVGL + business ACK.
 add_executable(test_nv_glue tests/test_nv_glue.c)
 target_link_libraries(test_nv_glue PRIVATE desk_ws63_glue_host)
