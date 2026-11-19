@@ -207,3 +207,15 @@ python3 tools/ws63_overlay.py --output build/ws63-overlay
 [三模 UI 与通信任务模型](docs/UI_MESSAGE_BRIDGE.md) · [SDK 实际编译门槛](https://github.com/hu-qi/XiaohongDeskCard/issues/7)。
 
 **这是 C99 软件隔离验证，不代表 WS63 BLE/SLE/HTTP 工作线程已编译或 HAP 已运行。**
+
+
+## 2026-11-19 · CMSIS-RTOS2 无实机编译与首轮 HAP Gate A
+
+已新增 `firmware/platform/ws63/desk_ws63_cmsis.[ch]`：用于给原小鸿 LvglTask 投递 4 字节显示事件，检测上游消息队列大小，并在队列满/唤醒丢失时由已有 UI 任务的周期轮询恢复。该模块已通过 C99 Host 模拟和 ARM **官方 CMSIS-RTOS2 v2.3.0 头文件**编译检查；没有链接实际 WS63 SDK。
+
+WS63 待审查源码包更新为 **12 C + 12 H**，包含 CMSIS 事件适配层；仍需绑定真正的 `g_disp_event_qid`、Flash、无线服务和 HTTP 服务。
+
+- [CMSIS 与小鸿 LvglTask 接入规范](docs/WS63_CMSIS_BRIDGE.md)
+- [首次 DevEco HAP 仅编译 Gate A 指南](docs/HAP_BUILD_HANDOFF.md)
+
+**下一步需要具备 DevEco Studio 环境的人进行首次 HAP 编译诊断**，不运行 App、不安装到 HarmonyOS 7 手机、更不烧录小鸿。编译是否通过目前未知。
