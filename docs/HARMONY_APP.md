@@ -8,10 +8,14 @@
 
 ### 开发模式
 
-- BLE Mock、SLE Mock：**纯 ArkTS 本地内存模拟**，不触发蓝牙或星闪。
-- Wi-Fi HTTP：NetworkKit 的真实网络请求，需要用户输入端点和令牌。后端可选择真实设备或测试服务。
-- Mac/Linux 浏览器模拟器：本地 loopback HTTP + 真实 C99 Desk Core；它比 ArkTS 内存 Mock 更接近固件业务行为。
-- BLE/SLE 原生适配源码 `BleGattLink.ets` / `SleSsapLink.ets`：调用扫描/连接/写入和通知 SDK，并已补充业务 ACK 解码/超时。现有 UUID **只是拟定值**，WS63 端尚未实现对应服务。真实无线写入按钮尚未启用。
+页面不再使用 Mock：BLE / 星闪按钮走真实无线链路。
+
+- BLE / SLE：扫描广播名称为 `XiaohongDesk` 的设备，连接后按 `DeskServiceIds` 发现 Desk Card 服务，写入 `DeskWireFrame` 生成的 BEGIN/CHUNK/COMMIT 包，并等待设备 16 字节业务 ACK。**写入成功不等于桌牌已更新**，只有 ACK 才算完成。
+- `RadioDeskTransport.ets`：`BleGattLink` / `SleSsapLink` 的统一 `DeskTransport` 实现。由于 Desk Wire v1 没有无线读取操作，`getStatus()` 用一次必然被拒的 SET（`expectedRevision = UINT32_MAX`）取得设备真实 revision；Desk Core 在持久化之前就拒绝，因此不会改动桌牌。
+- 自动选择链路：复用 `DeskRouter.ts`，顺序 SLE → BLE → Wi-Fi。只有连接/读状态失败才回退；一旦写入过，ACK 丢失属于未知结果，不会换通道重发。
+- Wi-Fi HTTP：NetworkKit 的真实网络请求，需要用户输入端点和令牌。
+- Mac/Linux 浏览器模拟器：本地 loopback HTTP + 真实 C99 Desk Core。
+- `MockDeskTransport.ets` 仍保留（`tests/router.test.mjs` 与离线预览使用），但页面已不引用。
 
 ## 工程结构
 
@@ -44,6 +48,7 @@ apps/harmony/
         DeskRouter.ts
         BleGattLink.ets
         SleSsapLink.ets
+        RadioDeskTransport.ets
       resources/base/profile/main_pages.json
 ```
 
@@ -78,10 +83,10 @@ apps/harmony/
 
 ## 还缺什么？
 
-- DevEco 首次 Debug HAP 构建及启动资源问题已通过；后续源码改动的 DevEco 回归仍需执行。
-- BLE/SLE 扫描、权限及 ACK 已有 SDK 调用原型；**App 启动已验证**，但还缺真实运行中的完整配对/认领、设备端广播、业务 ACK 和 GATT/SSAP UUID 固化。
-- C99 设备侧 BEGIN/CHUNK/COMMIT **解析器已实现并通过宿主机测试**，但还未集成到 WS63 的 BLE/SLE 服务端和 Desk Core UI 任务。
-- 真实 WS63/LVGL 固件编译、烧录、三模共存与功耗实测。
+- 页面已改为真实链路，`hvigorw assembleHap` 在本机通过（含 `RadioDeskTransport`、`DeskRouter` 接入）；仍需在 DevEco 里做一次回归确认。
+- BLE/SLE 扫描、连接、写入与业务 ACK 已全部接上页面；**真机端到端仍未验证**：需要烧录含最新 UUID/SLE 修复的固件后实测。
+- C99 设备侧 BEGIN/CHUNK/COMMIT **解析器已实现并通过宿主机测试**，并已接到 WS63 的 GATT/SSAP 服务端与 Desk Core UI 任务；整链路仍需真机验证。
+- 设备端 ownership/认领（配对之外的身份校验）仍未实现：当前固件在 GATT/SSAP 连接建立后即视为已授权。
 
 ## 当前实际测试证据
 

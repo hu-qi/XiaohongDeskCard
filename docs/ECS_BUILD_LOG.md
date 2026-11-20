@@ -70,20 +70,34 @@
 
 ## 本地产物清单
 
-固件产物存放于本地 `xiaohong-firmware/`:
-- `ws63-liteos-app_all.fwpkg` (2,115,624 B)
-  - SHA-256: `a8239c137664ab634e611a0d1a75e53442295c1b15b559df69aa2898fd2605c0`
-  - 公开下载: <https://huqi-blog.obs.cn-north-4.myhuaweicloud.com/xiaohong-deskcard/ws63-liteos-app_all_9.9.0_a8239c13.fwpkg>
-- `ws63-liteos-app_load_only.fwpkg` (1,984,340 B)
-  - SHA-256: `202dea365deea9686945354c60c014efb80b69c94c7ff418be333c19bb9dd60a`
+固件产物存放于本地 `xiaohong-firmware/`(当前版本 = **9.9.0 / `c0090bf7`**,2026-11-20 16:03 构建):
+- `ws63-liteos-app_all.fwpkg` (2,295,912 B)
+  - SHA-256: `c0090bf7a202eecc73f82f92da2f56c18e56e7493b502d179e976d79190ec26c`
+  - 公开下载: <https://huqi-blog.obs.cn-north-4.myhuaweicloud.com/xiaohong-deskcard/ws63-liteos-app_all_9.9.0_c0090bf7.fwpkg>
+  - 已用匿名 curl 回读校验: HTTP 200,2,295,912 B,SHA-256 一致
+- `ws63-liteos-app_load_only.fwpkg` (2,164,820 B)
+  - SHA-256: `61f6d65466ccd82b17ebb90ca08f258a6dc290ec88f22e2495dbb04243c76f5f`
+  - 公开下载: <https://huqi-blog.obs.cn-north-4.myhuaweicloud.com/xiaohong-deskcard/ws63-liteos-app_load_only_9.9.0_61f6d654.fwpkg>
+  - 已用匿名 curl 回读校验: HTTP 200,2,164,820 B,SHA-256 一致
 
-构建日志: <https://huqi-blog.obs.cn-north-4.myhuaweicloud.com/xiaohong-deskcard/build.log>
+构建日志: <https://huqi-blog.obs.cn-north-4.myhuaweicloud.com/xiaohong-deskcard/build_9.9.0_c0090bf7.log>
 
-> 该版本修复了两个真机实测发现的 BLE 缺陷:
+> **上一版** `deb82dfc`(2,115,752 B / `ws63-liteos-app_all_9.9.0_deb82dfc.fwpkg`)保留在 OBS 供回滚。
+
+### 9.9.0 `c0090bf7` 相对 `deb82dfc` 的改动
+
+1. **中文字体真正进镜像** —— `desk_font_cn_12`(GB2312 全集,20902 字,1.5 MB 源 / 184 KB 目标码)加入 `BUILD.gn`,并在 ELF 中确认 `T desk_font_cn_12`。此前姓名/职务/单位的中文只能显示为空白。
+2. **首启顶栏不再是空色块** —— `desk_core_init()` 此前只设 name/title/theme,`organization` 是空串,顶部色带因此只有一个纯色块、没有字。现默认 `小鸿智能桌牌`;`tests/test_core.c` 断言首启 organization 非空。
+3. **SLE 广播不再开机几秒后消失** —— 协议栈停止广播后,`sle_start_announce()` 必须先 `sle_stop_announce()` 复位状态机才能重启。`desk_sle_announce_keepalive()` 每 5 s 复查一次,栈回报停止后 0.5 s 内重开。
+4. **一条连接只能改一次桌牌**(详见下方第 4 条)。
+5. **BLE 广播保活** —— 与 SLE 同样每 5 s 复查并重开 `gap_ble_start_adv`。
+
+> **旧版 `deb82dfc` 修复的 BLE 缺陷**:
 >
 > 1. **已配网设备上 BLE 完全不存在** —— `enable_ble()` 此前只有配网任务一条调用路径,而已配网设备根本不会启动配网任务。现在由 UI 任务轮询自行使能并广播 `XiaohongDesk`,同时补上了连接状态回调(此前 `desk_ble_on_connect()` 从未被调用,导致 ACK 永远发不出去)。
 > 2. **SLE 广播 AD 结构顺序反了** —— SLE 是 `[类型][长度][数据]`,BLE 是 `[长度][类型][数据]`。scan response 用了 BLE 顺序,协议栈直接丢弃整块,设备永远扫不到(但 `sle_start_announce` 返回成功,不报错)。同时补上了 128-bit 服务 UUID 广播,让鸿蒙可按服务发现。
 > 3. **128-bit UUID 字节序反了** —— BLE 栈按小端存储 UUID,而头文件宏是字符串顺序。真机枚举到的特征 UUID 是期望值的逐字节反序(`44b4cc5b-...` 变成 `52202e80-...`),导致客户端找不到特征、写入被静默丢弃。已加 `desk_uuid128_le()` 转换并配回归测试。
+> 4. **一条连接只能改一次桌牌** —— `desk_radio_link_receive()` 在 COMMIT 被接受后置 `awaiting_ack`,但 `desk_radio_link_ack_complete()` 从未被调用,该标志永不复位。第二条命令被以 `DESK_RADIO_AWAITING_ACK` 静默丢弃。现由 `desk_ble_flush_ack()` / `desk_sle_flush_ack()` 在 ACK 取出后复位;`tests/test_ws63_adapters.c` 用同一连接连发两条命令钉住该行为。
 
 ## 后续(XiaohongDeskCard Gate B 对接)
 

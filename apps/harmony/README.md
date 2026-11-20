@@ -17,7 +17,9 @@
 
 使用 DevEco Studio 打开本目录 `apps/harmony`（不要打开仓库顶层作为 HarmonyOS 工程）。当前 SDK 基线配置为 `6.0.2(22)`，沿用本仓库主人已有的 HarmonyOS 工程风格；本地 Debug HAP 的首次编译/安装/启动已经验证，但后续分支代码的每次迭代仍需回归构建。
 
-页面上的 **BLE Mock / SLE Mock** 是明确标注的纯 ArkTS 模拟按钮；真正的 GATT / SSAP 客户端还需要服务 UUID、设备端广播和配对授权等条件，尚未接入 UI。
+页面上的 BLE / 星闪按钮已接入真实链路：扫描 → 连接 → 发现 Desk Card 服务 → 写 Desk Wire 帧 → 等待设备业务 ACK。`RadioDeskTransport.ets` 是 `BleGattLink` / `SleSsapLink` 的统一入口，“自动选择链路”走 `DeskRouter`（SLE → BLE → Wi-Fi，仅在写入前失败时回退）。`MockDeskTransport.ets` 仍保留供离线协议预览，但页面不再引用它。
+
+设备端仍需广播 `XiaohongDesk`、注册 `DeskServiceIds` 中的服务/特征，并在 `desk_core_apply()` 之后发送 16 字节业务 ACK；只写成功不算更新完成。
 
 特别注意：首版用 `@kit.NearLinkKit`，它的相关接口自 API 13 起即有提供，**不要求为第一版直接切换到 API 26**。请参阅 [官方 V13 SSAP](https://developer.huawei.com/consumer/cn/doc/harmonyos-references-V13/nearlink-ssap-V13/)。
 

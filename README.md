@@ -97,9 +97,9 @@ curl -X PUT http://127.0.0.1:8765/api/v1/desk/content \
 
 已在 [apps/harmony](apps/harmony) 中创建 Stage 模型工程结构、EntryAbility、ArkUI 桌牌编辑界面：
 
-- BLE Mock / SLE Mock 按钮用于 ArkTS 业务预览；
-- Wi-Fi HTTP 按钮使用 NetworkKit 对明确指定的测试设备发送真实 HTTP 请求；
-- `BleGattLink.ets` 和 `SleSsapLink.ets` 是基于官方 SDK 的无线客户端适配原型，尚无 WS63 服务 UUID / 业务 ACK，未在 DevEco 编译；
+- 扫描到的 BLE / 星闪设备以列表呈现，“连接并发送”按钮走真实无线链路：连接 → 发现 Desk Card 服务 → 写入 Desk Wire 帧 → 等待设备业务 ACK；
+- Wi-Fi HTTP 按钮使用 NetworkKit 对明确指定的设备发送真实 HTTP 请求；
+- `RadioDeskTransport.ets` 把 `BleGattLink` / `SleSsapLink` 接到统一 `DeskTransport` 接口；`DeskRouter` 负责 SLE → BLE → Wi-Fi 的回退，且只在写入前失败时回退；
 - `DeskWireFrame.ets` 提供与 C99 Desk Core 匹配的帧布局及应用层 BEGIN/CHUNK/COMMIT 分包设计；
 - 工程配置对齐 HarmonyOS `6.0.2(22)`，使用从 API 13 起可用的 `@kit.NearLinkKit`；后续可迁移到新版 `@kit.ConnectivityKit`。
 
@@ -191,7 +191,7 @@ python3 tools/ws63_overlay.py --output build/ws63-overlay
 
 `GET status`、`PUT content` 现共享唯一 Desk Dispatcher 顺序执行；`desk_reply_mailbox` 将 UI 任务产生的 BLE/SLE 业务 ACK 和 Wi-Fi 状态快照转交通信工作线程。已覆盖请求顺序、权限撤销、显示失败后持久化与实际显示的差异、响应队列满时的背压/未知结果。
 
-桌面模拟器的 Wi-Fi GET/PUT 和 BLE/SLE Mock 都已经经过同一 C99 UI 队列及 mailbox。新模块纳入 WS63 待审查源码暂存包（**11 C + 11 H**）。
+桌面模拟器的 Wi-Fi GET/PUT 和 BLE/SLE 业务 ACK 都已经经过同一 C99 UI 队列及 mailbox。新模块纳入 WS63 待审查源码暂存包（**11 C + 11 H**）。
 
 [UI GET/SET 与回传队列规范](docs/UI_MESSAGE_BRIDGE.md) · [SDK 编译 Gate](https://github.com/hu-qi/XiaohongDeskCard/issues/7)。
 

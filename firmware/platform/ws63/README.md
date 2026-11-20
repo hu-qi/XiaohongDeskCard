@@ -49,6 +49,12 @@ ACKs are pumped from the UI task (`desk_board_poll`), not from a radio worker:
 the vendor only runs its BLE provisioning task when the device has no Wi-Fi
 config, so it is not a reliable pump.
 
+Flushing an ACK also clears the link's `awaiting_ack` state. Without that the
+ingress rejects every packet after the first command on a connection with
+`DESK_RADIO_AWAITING_ACK`, so a client could update the card exactly once per
+connection. `tests/test_ws63_adapters.c` drives two commands over one
+connection to pin this.
+
 All three transports start from the UI task. The BLE connection-state callback
 that `desk_ble_poll()` installs forwards connect/disconnect into the Desk Core,
 which the vendor's provisioning callback does not do — without it the desk link
@@ -80,3 +86,9 @@ The GN side additionally needs the SLE include directory, which the vendor
 - The HTTP bearer token is provisioned through `desk_transport_set_http_token()`;
   the BLE/SLE ownership handshake that should supply it is not implemented yet,
   so the HTTP API answers 401 until a token is set.
+- Ownership/authorization is currently "a GATT/SSAP connection exists": the
+  adapters set `authorized = true` on connect. There is no pairing-bound or
+  per-peer credential yet, so any peer that reaches the service can write.
+- Desk Wire v1 has no read-back op. The app learns the revision with a SET that
+  is guaranteed to be refused (`expectedRevision = UINT32_MAX`), which Desk Core
+  rejects before saving. A dedicated read op would be cheaper and clearer.
