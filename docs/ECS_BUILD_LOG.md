@@ -1,6 +1,6 @@
 # Gate B · 华为云 ECS 真实构建记录
 
-状态:**进行中** — ECS 已就绪,源码同步中(2026-11-20)。
+状态:**进行中** — ECS 系统已重装恢复,依赖已重放,repo sync 中(2026-11-20)。
 
 ## 资源与工具版本
 
@@ -32,11 +32,28 @@
 6. apt 首轮被 SSH 断连打断 → `dpkg --configure -a` 修复后重跑成功。
 7. repo launcher 需 `export REPO_URL=https://mirrors.tuna.tsinghua.edu.cn/git/git-repo`。
 
+### 2026-11-20 SSH 全断事件(重装操作系统)与真实根因
+
+时间线:构建中断后 SSH 在 banner 阶段(`kex_exchange_identification: Connection closed by remote host`)被断。SOFT/HARD 重启、API 密码重置全部无效 → 误判为系统盘 sshd 损坏 → HARD 关机后 `ReinstallServerWithCloudInit`(job `ff808081a0ed145901a1f66018b53e9a`,39 秒即 SUCCESS)。
+
+重装后 SSH 依旧断 → 深挖后推翻原诊断,真实根因在**本地网络**:
+
+1. 对 EIP 任意端口(22/80/443/12345)的裸 TCP 都"连接成功但无数据",ICMP 100% 丢包 — 虚机不可能回应未监听的端口,是中间盒在 SYN-proxy。
+2. 同一网络下所有华为云 EIP(含 2024 年既有的其他实例)全部复现,GitHub:22 正常 — 与实例无关。
+3. 本机 `utun1024`(Clash Verge mihomo,198.19.0.1,TUN auto-route)接管全部流量;规则 `GeoIP cn → DIRECT` 使华为云 IP 直连,而办公网(aTrust 零信任 172.16.0.0/12)对华为云 EIP 的 22 端口做 TCP 拦截。
+4. mihomo 切 global 模式(流量走代理节点)后 SSH 一秒连通;ECS 控制台日志证实虚机一直正常(全新 Ubuntu 22.04.5,cloud-init 完成,authorized_keys 含正确公钥)。
+
+**修复方式**:临时 PATCH mihomo `/configs` `mode: global` 做 SSH/SCP,结束切回 `rule`;本机已建 `~/bin/xhb-ssh`、`~/bin/xhb-scp` 包装器自动切换/还原。持久化方案(往 profiles `rXXavwkAtHFB.yaml` prepend `IP-CIDR,120.46.211.205/32,Proxy,no-resolve`)需 Verge UI 重新激活 profile 才生效,未采用。
+
+**重装副作用**:系统盘清空,apt 依赖/repo 源码/prebuilts 全部重来;EIP、实例 ID、密钥对不变。重装后首次连接必须清 known_hosts(主机密钥已更换,新 ED25519 指纹与控制台日志一致 `SHA256:ondjZhHL6Ub5x4C/m90116QxDuEn5oW2Mnt3kL2gB/E`)。
+
+**经验**:诊断 SSH banner 阶段被断时,先区分"虚机拒绝"与"中间盒拦截"——对未监听端口(如 12345)做裸 TCP 探测,若同样被接受则流量根本没到虚机;再换一条出口路径(代理)交叉验证。本例两次误诊断(os 重装 39 秒 SUCCESS 也应视为可疑信号)代价约 2 小时。
+
 ## 构建步骤进度
 
 - [x] ECS 创建(t7.xlarge.4 + Ubuntu 22.04 + 密钥对)
 - [x] DNS 配置
-- [x] apt 依赖 + repo + ohos-build + git lfs
+- [x] apt 依赖 + repo + ohos-build + git lfs(重装后 2026-11-20 重放完成;注:`libc6-dev-amd64` 在 amd64 宿主不存在,跳过不影响构建)
 - [ ] repo sync 源码(~11 GB)
 - [ ] `git lfs pull` 全仓 LFS
 - [ ] prebuilts_download.sh(~11 GB)
