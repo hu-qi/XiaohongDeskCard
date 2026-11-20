@@ -40,7 +40,7 @@ POLL_ANCHOR = "    while (1) {\n"
 
 def _include_block() -> str:
     return (
-        f"{BEGIN}\n"
+        f"\n{BEGIN}\n"
         '#include "desk_ws63_board.h"\n'
         f"{END}\n"
     )
