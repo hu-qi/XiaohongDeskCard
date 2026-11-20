@@ -115,6 +115,19 @@ add_executable(test_ws63_cmsis tests/test_ws63_cmsis.c)
 target_link_libraries(test_ws63_cmsis PRIVATE desk_ws63_cmsis_host)
 add_test(NAME desk_ws63_cmsis_host_tests COMMAND test_ws63_cmsis)
 
+# Board binding: the call path that keeps deskcard objects from being dropped by
+# the linker. Host build uses a fake two-item NV HAL instead of uapi_nv_*.
+add_library(desk_ws63_board_host STATIC firmware/platform/ws63/desk_ws63_board.c)
+target_include_directories(desk_ws63_board_host PUBLIC firmware/platform/ws63)
+target_link_libraries(desk_ws63_board_host PUBLIC desk_ws63_glue_host)
+target_compile_definitions(desk_ws63_board_host PUBLIC DESK_BOARD_HOST_TEST)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(desk_ws63_board_host PRIVATE -Wall -Wextra -Werror -Wpedantic)
+endif()
+add_executable(test_ws63_board tests/test_ws63_board.c)
+target_link_libraries(test_ws63_board PRIVATE desk_ws63_board_host)
+add_test(NAME desk_ws63_board_host_tests COMMAND test_ws63_board)
+
 # Full host integration: Flash two-slot journal -> WS63 glue -> LVGL + business ACK.
 add_executable(test_nv_glue tests/test_nv_glue.c)
 target_link_libraries(test_nv_glue PRIVATE desk_ws63_glue_host)

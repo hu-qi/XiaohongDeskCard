@@ -15,10 +15,14 @@ class Ws63OverlayTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "overlay"
             info = stage(ROOT, target)
-            self.assertEqual(info["sourceCount"], 12)
-            self.assertEqual(info["headerCount"], 12)
-            self.assertEqual(len(info["files"]), 24)
-            self.assertEqual(len(set(item["staged"] for item in info["files"])), 24)
+            expected_sources = len(CORE_SOURCES) + len(UI_SOURCES)
+            self.assertEqual(info["sourceCount"], expected_sources)
+            self.assertEqual(info["headerCount"], expected_sources)
+            self.assertEqual(len(info["files"]), expected_sources * 2)
+            self.assertEqual(
+                len(set(item["staged"] for item in info["files"])),
+                expected_sources * 2,
+            )
             for entry in info["files"]:
                 staged = target / entry["staged"]
                 original = ROOT / entry["source"]
