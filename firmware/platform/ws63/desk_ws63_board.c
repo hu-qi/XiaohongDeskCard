@@ -23,6 +23,7 @@
  * desk_board_test_set_nv_io(); production code paths are unchanged. */
 #include "desk_nv_store.h"
 #include "desk_ws63_glue.h"
+#include "desk_ws63_transport.h"
 #else
 /* Only the NV API and the error codes are needed here. The board poll is
  * driven directly by the vendor LvglTask, so no CMSIS queue is referenced. */
@@ -31,6 +32,7 @@
 
 #include "desk_nv_store.h"
 #include "desk_ws63_glue.h"
+#include "desk_ws63_transport.h"
 #endif
 
 /* Two NV keys in region 0 (0x0001..0x0FFF). Vendor already uses 0x1001 (Wi-Fi)
@@ -45,6 +47,7 @@
 typedef struct {
     desk_ws63_port_t port;
     desk_nv_store_t nv;
+    desk_transport_t transport;
     bool ready;
 } desk_board_t;
 
@@ -140,24 +143,38 @@ static void board_enqueue_ack(void *ctx, desk_channel_t channel,
                               uint32_t peer_token,
                               const uint8_t ack[DESK_ACK_SIZE])
 {
-    /* No BLE/SLE/HTTP transport is registered in this build; ACK is dropped
-     * rather than pretending a radio service exists. */
-    (void)ctx; (void)channel; (void)peer_token; (void)ack;
+    (void)ctx;
+    (void)desk_reply_push_ack(&g_board.transport.replies, channel, peer_token,
+                              ack);
 }
 
 static bool board_authorize(void *ctx, desk_channel_t channel,
                             uint32_t peer_token)
 {
-    /* No remote transport in this build, so no peer can ever be authorized. */
-    (void)ctx; (void)channel; (void)peer_token;
-    return false;
+    (void)ctx;
+    /* Re-check the live generation when the UI task actually runs, so a peer
+     * that disconnected while its request sat in the queue is rejected. */
+    switch (channel) {
+        case DESK_CHANNEL_BLE:
+            return peer_token != 0u &&
+                   peer_token == g_board.transport.ble_generation;
+        case DESK_CHANNEL_SLE:
+            return peer_token != 0u &&
+                   peer_token == g_board.transport.sle_generation;
+        case DESK_CHANNEL_WIFI:
+            return peer_token != 0u;
+        default:
+            return false;
+    }
 }
 
 static void board_enqueue_status(void *ctx, desk_channel_t channel,
                                  uint32_t peer_token, desk_result_t result,
                                  const desk_http_state_t *state)
 {
-    (void)ctx; (void)channel; (void)peer_token; (void)result; (void)state;
+    (void)ctx;
+    (void)desk_reply_push_status(&g_board.transport.replies, channel,
+                                 peer_token, result, state);
 }
 
 /* ---- public entry points ---- */
@@ -185,8 +202,23 @@ int desk_board_init(void)
     cb.context = &g_board;
 
     if (!desk_ws63_port_init(&g_board.port, cb, NULL)) return 0;
+
+    /* Transport adapters submit through the port's own dispatcher so the UI
+     * task keeps a single owner queue for LVGL and Desk Core. */
+    desk_transport_config_t tcfg = {
+        desk_ws63_port_dispatcher(&g_board.port),
+        &g_board.port.core,
+        NULL, NULL, NULL
+    };
+    if (!desk_transport_init(&g_board.transport, &tcfg)) return 0;
+
     g_board.ready = true;
     return 1;
+}
+
+desk_transport_t *desk_board_transport(void)
+{
+    return g_board.ready ? &g_board.transport : NULL;
 }
 
 void desk_board_poll(void)

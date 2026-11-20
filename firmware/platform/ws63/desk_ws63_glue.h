@@ -61,4 +61,11 @@ unsigned desk_ws63_port_ui_drain(desk_ws63_port_t *port);
 /* Only from LVGL task, after radio producers and ACK workers are stopped. */
 void desk_ws63_port_destroy(desk_ws63_port_t *port);
 
+/*
+ * The dispatcher owned by this port. Transport adapters must submit through
+ * THIS instance so that LVGL keeps a single owner queue; do not create a
+ * second dispatcher for the same Desk Core.
+ */
+desk_dispatcher_t *desk_ws63_port_dispatcher(desk_ws63_port_t *port);
+
 #endif

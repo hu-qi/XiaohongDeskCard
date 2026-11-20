@@ -130,3 +130,9 @@ void desk_ws63_port_destroy(desk_ws63_port_t *port)
     desk_lvgl_view_destroy(&port->view);
     memset(&port->dispatcher, 0, sizeof(port->dispatcher));
 }
+
+desk_dispatcher_t *desk_ws63_port_dispatcher(desk_ws63_port_t *port)
+{
+    if (port == NULL || !port->ready) return NULL;
+    return &port->dispatcher;
+}

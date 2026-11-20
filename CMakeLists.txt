@@ -124,9 +124,36 @@ target_compile_definitions(desk_ws63_board_host PUBLIC DESK_BOARD_HOST_TEST)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(desk_ws63_board_host PRIVATE -Wall -Wextra -Werror -Wpedantic)
 endif()
+# Transport wiring: BLE/SLE ingress + HTTP bearer auth -> dispatcher -> ACK.
+# Host build exercises the exact client frame layout from the Harmony app.
+add_library(desk_ws63_transport_host STATIC firmware/platform/ws63/desk_ws63_transport.c)
+target_include_directories(desk_ws63_transport_host PUBLIC firmware/platform/ws63)
+target_link_libraries(desk_ws63_transport_host PUBLIC desk_ws63_glue_host)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(desk_ws63_transport_host PRIVATE -Wall -Wextra -Werror -Wpedantic)
+endif()
+
 add_executable(test_ws63_board tests/test_ws63_board.c)
-target_link_libraries(test_ws63_board PRIVATE desk_ws63_board_host)
+target_link_libraries(test_ws63_board PRIVATE desk_ws63_board_host
+                      desk_ws63_transport_host)
 add_test(NAME desk_ws63_board_host_tests COMMAND test_ws63_board)
+
+add_executable(test_ws63_transport tests/test_ws63_transport.c)
+target_link_libraries(test_ws63_transport PRIVATE desk_ws63_transport_host)
+add_test(NAME desk_ws63_transport_host_tests COMMAND test_ws63_transport)
+
+# SDK-facing adapters (GATT handle routing + HTTP routes/auth), host mode.
+add_library(desk_ws63_adapters_host STATIC firmware/platform/ws63/desk_ws63_adapters.c)
+target_include_directories(desk_ws63_adapters_host PUBLIC firmware/platform/ws63)
+target_link_libraries(desk_ws63_adapters_host PUBLIC desk_ws63_board_host
+                      desk_ws63_transport_host)
+target_compile_definitions(desk_ws63_adapters_host PUBLIC DESK_ADAPTERS_HOST_TEST)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(desk_ws63_adapters_host PRIVATE -Wall -Wextra -Werror -Wpedantic)
+endif()
+add_executable(test_ws63_adapters tests/test_ws63_adapters.c)
+target_link_libraries(test_ws63_adapters PRIVATE desk_ws63_adapters_host)
+add_test(NAME desk_ws63_adapters_host_tests COMMAND test_ws63_adapters)
 
 # Full host integration: Flash two-slot journal -> WS63 glue -> LVGL + business ACK.
 add_executable(test_nv_glue tests/test_nv_glue.c)
