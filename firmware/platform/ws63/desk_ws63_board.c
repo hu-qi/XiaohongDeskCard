@@ -24,12 +24,12 @@
 #include "desk_nv_store.h"
 #include "desk_ws63_glue.h"
 #else
-#include "cmsis_os2.h"
+/* Only the NV API and the error codes are needed here. The board poll is
+ * driven directly by the vendor LvglTask, so no CMSIS queue is referenced. */
 #include "errcode.h"
 #include "nv.h"
 
 #include "desk_nv_store.h"
-#include "desk_ws63_cmsis.h"
 #include "desk_ws63_glue.h"
 #endif
 
