@@ -98,6 +98,13 @@ void desk_ble_poll(void);
  */
 void desk_ble_release(void);
 
+/*
+ * Periodically restart SLE announce so the device stays discoverable. The WS63
+ * SLE stack may stop announcing after a short period if no scanner is actively
+ * seeking. Call from the UI task poll (desk_board_poll) with the current tick.
+ */
+void desk_sle_announce_keepalive(uint32_t now_ms);
+
 /* ---- worker pumps ---- */
 
 /*

@@ -26,7 +26,9 @@
 #include "desk_ws63_transport.h"
 #else
 /* Only the NV API and the error codes are needed here. The board poll is
- * driven directly by the vendor LvglTask, so no CMSIS queue is referenced. */
+ * driven directly by the vendor LvglTask, so no CMSIS queue is referenced.
+ * osKernelGetTickCount()/TickFreq() come from CMSIS-RTOS2. */
+#include "cmsis_os2.h"
 #include "errcode.h"
 #include "nv.h"
 
@@ -35,6 +37,15 @@
 #include "desk_ws63_glue.h"
 #include "desk_ws63_http.h"
 #include "desk_ws63_transport.h"
+
+/* CMSIS ticks are not guaranteed to be 1 ms; convert to milliseconds for the
+ * announce keepalive. */
+static uint32_t board_now_ms(void)
+{
+    uint32_t freq = osKernelGetTickFreq();
+    if (freq == 0u) freq = 1u;
+    return (uint32_t)(((uint64_t)osKernelGetTickCount() * 1000u) / freq);
+}
 #endif
 
 /* Two NV keys in region 0 (0x0001..0x0FFF). Vendor already uses 0x1001 (Wi-Fi)
@@ -245,6 +256,10 @@ void desk_board_poll(void)
     /* Bring BLE up once the device is on Wi-Fi, and hand it back if the device
      * falls into provisioning. Cheap and idempotent. */
     desk_ble_poll();
+
+    /* Keep SLE announce alive: the WS63 stack may stop advertising after a
+     * short period if no scanner is actively seeking. */
+    desk_sle_announce_keepalive(board_now_ms());
 
     /* The ACKs Desk Core just produced must go out on whichever link asked.
      * The vendor only runs its BLE provisioning task while there is no Wi-Fi

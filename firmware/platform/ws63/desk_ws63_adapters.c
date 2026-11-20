@@ -10,6 +10,7 @@
 #include "bts_gatt_server.h"
 #include "bts_gatt_stru.h"
 #include "bts_le_gap.h"
+#include "cmsis_os2.h"
 #include "errcode.h"
 #include "osal_debug.h"
 #include "osal_task.h"
@@ -21,6 +22,17 @@
 #include "sle_errcode.h"
 #include "sle_ssap_server.h"
 #include "sle_ssap_stru.h"
+#endif
+
+#if !defined(DESK_ADAPTERS_HOST_TEST)
+/* CMSIS ticks are not guaranteed to be 1 ms; convert to milliseconds so the
+ * packet layer can detect inter-chunk timeouts correctly. */
+static uint32_t adapters_now_ms(void)
+{
+    uint32_t freq = osKernelGetTickFreq();
+    if (freq == 0u) freq = 1u;
+    return (uint32_t)(((uint64_t)osKernelGetTickCount() * 1000u) / freq);
+}
 #endif
 
 /* ---- shared state ---- */
@@ -56,6 +68,9 @@ static bool g_sle_registered;
 
 #if !defined(DESK_ADAPTERS_HOST_TEST)
 static uint8_t g_sle_server_id;
+/* Set by the announce callbacks, not by sle_start_announce()'s return value:
+ * the stack can accept the call and still stop announcing later. */
+static volatile bool g_sle_announce_active;
 #endif
 
 static void sle_set_handles(uint16_t cmd_handle, uint16_t ack_handle)
@@ -90,7 +105,11 @@ bool desk_ble_on_write(uint16_t handle, const uint8_t *value, uint16_t len)
     desk_transport_t *t = desk_board_transport();
     if (t == NULL || value == NULL || len == 0u) return true;
 
-    const uint32_t now = 0u; /* Adapt to osKernelGetTickCount() on device. */
+#if defined(DESK_ADAPTERS_HOST_TEST)
+    const uint32_t now = 0u;
+#else
+    const uint32_t now = adapters_now_ms();
+#endif
     (void)desk_transport_ble_write(t, t->ble_generation, value, len, now);
     return true;
 }
@@ -126,6 +145,15 @@ bool desk_ble_flush_ack(void)
     uint8_t ack[DESK_ACK_SIZE];
     if (!desk_transport_ble_take_ack(t, t->ble_generation, ack)) return false;
 
+    /*
+     * The reply has left the mailbox, so the link must stop waiting for it
+     * whether or not the notification reaches the peer. Leaving awaiting_ack
+     * set would make desk_radio_link_receive() reject every later packet on
+     * this connection with DESK_RADIO_AWAITING_ACK: one command per connection.
+     */
+    (void)desk_radio_link_ack_complete(&t->ble, t->ble_generation, ack,
+                                       DESK_ACK_SIZE);
+
 #if !defined(DESK_ADAPTERS_HOST_TEST)
     gatts_ntf_ind_t param = {0};
     param.attr_handle = g_ack_handle;
@@ -152,6 +180,11 @@ static bool g_ble_starting;
 static bool g_ble_owned;
 /* Set from the stack's disable callback, so release() can wait for it. */
 static volatile bool g_ble_disabled;
+/* BLE advertising keepalive: the WS63 stack may stop advertising after a
+ * short period, just like SLE. Track the last restart time and periodically
+ * restart advertising to keep the device discoverable. */
+static uint32_t g_ble_adv_restart_ms;
+#define DESK_BLE_ADV_RESTART_INTERVAL_MS 5000u /* 5 s */
 
 static void desk_ble_set_local_name(void)
 {
@@ -211,7 +244,8 @@ static void desk_ble_gap_enable_cbk(errcode_t status)
     desk_ble_start_adv();
     g_ble_owned = true;
     g_ble_starting = false;
-    osal_printk("[desk ble] service ready, advertising as XiaohongDesk\r\n");
+    osal_printk("[desk ble] service ready, advertising as XiaohongDesk "
+                "(sle announcing %d)\r\n", (int)g_sle_announce_active);
 }
 
 static void desk_ble_gap_conn_state_cbk(uint16_t conn_id, bd_addr_t *addr,
@@ -295,8 +329,9 @@ static void desk_ble_begin(void)
 
     g_ble_starting = true;
     const errcode_t ret = enable_ble();
+    osal_printk("[desk ble] enable_ble -> 0x%x (sle announcing %d)\r\n",
+                ret, (int)g_sle_announce_active);
     if (ret != ERRCODE_BT_SUCCESS) {
-        osal_printk("[desk ble] enable_ble 0x%x\r\n", ret);
         g_ble_starting = false;
         return;
     }
@@ -347,7 +382,28 @@ void desk_ble_poll(void)
      * is nothing to do here — and doing it here would block the UI task. */
     if (desk_ble_provisioning()) return;
 
-    if (!g_ble_owned) desk_ble_begin();
+    if (!g_ble_owned) {
+        desk_ble_begin();
+        return;
+    }
+
+    /* BLE advertising keepalive: the WS63 stack may stop advertising after a
+     * short period. Periodically restart advertising to keep the device
+     * discoverable, similar to the SLE announce keepalive. */
+    if (!g_connected) {
+        uint32_t freq = osKernelGetTickFreq();
+        if (freq == 0u) freq = 1u;
+        const uint32_t now = (uint32_t)(((uint64_t)osKernelGetTickCount() * 1000u) / freq);
+        if (g_ble_adv_restart_ms == 0u) {
+            /* First poll after BLE came up: sync the timer so we don't
+             * immediately restart advertising. */
+            g_ble_adv_restart_ms = now;
+        } else if ((now - g_ble_adv_restart_ms) >= DESK_BLE_ADV_RESTART_INTERVAL_MS) {
+            g_ble_adv_restart_ms = now;
+            (void)gap_ble_stop_adv(DESK_BLE_ADV_HANDLE);
+            desk_ble_start_adv();
+        }
+    }
 }
 
 bool desk_ble_register_service(void)
@@ -479,7 +535,11 @@ bool desk_sle_on_write(uint16_t conn_id, uint16_t handle, const uint8_t *value,
     desk_transport_t *t = desk_board_transport();
     if (t == NULL || value == NULL || len == 0u) return true;
     (void)conn_id;
-    const uint32_t now = 0u; /* Adapt to osKernelGetTickCount() on device. */
+#if defined(DESK_ADAPTERS_HOST_TEST)
+    const uint32_t now = 0u;
+#else
+    const uint32_t now = adapters_now_ms();
+#endif
     (void)desk_transport_sle_write(t, t->sle_generation, value, len, now);
     return true;
 }
@@ -512,6 +572,11 @@ bool desk_sle_flush_ack(void)
 
     uint8_t ack[DESK_ACK_SIZE];
     if (!desk_transport_sle_take_ack(t, t->sle_generation, ack)) return false;
+
+    /* Same as BLE: clear the pending state once the reply has been taken, so
+     * the next command on this connection is not rejected as AWAITING_ACK. */
+    (void)desk_radio_link_ack_complete(&t->sle, t->sle_generation, ack,
+                                       DESK_ACK_SIZE);
 
 #if !defined(DESK_ADAPTERS_HOST_TEST)
     ssaps_ntf_ind_t param = {0};
@@ -702,6 +767,7 @@ static void desk_sle_announce_start(void)
     param.conn_supervision_timeout = DESK_SLE_CONN_TIMEOUT;
     const errcode_t pr = sle_set_announce_param(DESK_SLE_ADV_HANDLE, &param);
     const errcode_t ar = sle_start_announce(DESK_SLE_ADV_HANDLE);
+    g_sle_announce_active = (ar == ERRCODE_SLE_SUCCESS);
     osal_printk("[desk sle] announce param 0x%x start 0x%x\r\n", pr, ar);
 }
 
@@ -716,6 +782,34 @@ static void sle_enable_cbk(errcode_t status)
     }
     osal_printk("[desk sle] service ready, announcing as XiaohongDesk\r\n");
     desk_sle_announce_start();
+}
+
+/* These three callbacks are the only evidence that the stack stopped the
+ * announce: sle_start_announce() returning 0 does not mean it stays up. */
+static void sle_announce_enable_cbk(uint32_t announce_id, errcode_t status)
+{
+    g_sle_announce_active = (status == ERRCODE_SLE_SUCCESS);
+    osal_printk("[desk sle] announce enable id %u status 0x%x\r\n",
+                announce_id, status);
+}
+
+static void sle_announce_disable_cbk(uint32_t announce_id, errcode_t status)
+{
+    g_sle_announce_active = false;
+    osal_printk("[desk sle] announce disable id %u status 0x%x\r\n",
+                announce_id, status);
+}
+
+static void sle_announce_terminal_cbk(uint32_t announce_id)
+{
+    g_sle_announce_active = false;
+    osal_printk("[desk sle] announce terminal id %u\r\n", announce_id);
+}
+
+static void sle_disable_cbk(errcode_t status)
+{
+    g_sle_announce_active = false;
+    osal_printk("[desk sle] stack disabled status 0x%x\r\n", status);
 }
 
 static void sle_connect_state_changed_cbk(uint16_t conn_id,
@@ -733,6 +827,39 @@ static void sle_connect_state_changed_cbk(uint16_t conn_id,
         desk_sle_on_disconnect(conn_id);
         desk_sle_announce_start();
     }
+}
+
+/* ---- SLE announce keepalive ---- */
+
+/* The WS63 SLE stack stops announcing after a short period (observed: a few
+ * seconds). The SDK does not expose a "continuous announce" mode, so the UI
+ * task poll restarts announce periodically to keep the device discoverable.
+ *
+ * Key findings from real-device testing:
+ *  - sle_start_announce() alone cannot restart a stopped announce; it must be
+ *    preceded by sle_stop_announce() to reset the internal state machine.
+ *  - The announce terminal/disable callbacks fire reliably, so g_sle_announce_active
+ *    tracks the real state.
+ *  - A 5 s restart interval is short enough to keep the device visible with
+ *    only a brief gap, and long enough not to stress the stack.
+ */
+
+static uint32_t g_sle_announce_restart_ms;
+#define DESK_SLE_ANNOUNCE_RESTART_INTERVAL_MS 5000u /* 5 s */
+#define DESK_SLE_ANNOUNCE_RETRY_MS 500u             /* 0.5 s after stack-reported stop */
+
+void desk_sle_announce_keepalive(uint32_t now_ms)
+{
+    if (!g_sle_registered || g_sle_connected) return;
+    const uint32_t min_gap = g_sle_announce_active
+                                 ? DESK_SLE_ANNOUNCE_RESTART_INTERVAL_MS
+                                 : DESK_SLE_ANNOUNCE_RETRY_MS;
+    if ((now_ms - g_sle_announce_restart_ms) < min_gap) return;
+    g_sle_announce_restart_ms = now_ms;
+    /* Stop first: the stack rejects sle_start_announce() if the handle is
+     * still in a non-stopped state, even after a terminal callback. */
+    (void)sle_stop_announce(DESK_SLE_ADV_HANDLE);
+    desk_sle_announce_start();
 }
 
 static void sle_write_request_cbk(uint8_t server_id, uint16_t conn_id,
@@ -791,6 +918,10 @@ void desk_sle_start(void)
 
     sle_announce_seek_callbacks_t seek_cbks = {0};
     seek_cbks.sle_enable_cb = sle_enable_cbk;
+    seek_cbks.sle_disable_cb = sle_disable_cbk;
+    seek_cbks.announce_enable_cb = sle_announce_enable_cbk;
+    seek_cbks.announce_disable_cb = sle_announce_disable_cbk;
+    seek_cbks.announce_terminal_cb = sle_announce_terminal_cbk;
     (void)sle_announce_seek_register_callbacks(&seek_cbks);
 
     sle_connection_callbacks_t conn_cbks = {0};
@@ -814,6 +945,11 @@ bool desk_sle_register_service(void)
 
 void desk_sle_start(void)
 {
+}
+
+void desk_sle_announce_keepalive(uint32_t now_ms)
+{
+    (void)now_ms;
 }
 #endif
 
