@@ -541,6 +541,7 @@ bool desk_sle_flush_ack(void)
 /* AD structure types (SDK sample headers do not export them). */
 #define DESK_SLE_AD_TYPE_DISCOVERY_LEVEL 0x01u
 #define DESK_SLE_AD_TYPE_UUID16_LIST 0x05u
+#define DESK_SLE_AD_TYPE_UUID128_LIST 0x06u
 #define DESK_SLE_AD_TYPE_LOCAL_NAME 0x0Bu
 #define DESK_SLE_AD_TYPE_TX_POWER 0x0Cu
 
@@ -646,24 +647,42 @@ bool desk_sle_register_service(void)
     return sle_add_service_and_properties() == ERRCODE_SLE_SUCCESS;
 }
 
+/*
+ * SLE advertising structures are [type][length][value], the reverse of BLE's
+ * [length][type][value]. Getting this wrong makes the stack drop the whole
+ * block: the device never appears in a scan, even though announce starts
+ * successfully and no error is reported.
+ *
+ * Verified against the SDK sample (sle_speed_server_adv.c:38).
+ */
 static void desk_sle_announce_start(void)
 {
-    static const uint8_t adv_data[] = {
-        /* discovery level: normally discoverable */
-        DESK_SLE_AD_TYPE_DISCOVERY_LEVEL, 1u, 2u,
-        /* complete 16-bit service UUID list (none; the desk service is
-         * 128-bit and is discovered after connecting) */
-        DESK_SLE_AD_TYPE_TX_POWER, 1u, DESK_SLE_ADV_TX_POWER,
-    };
+    static const uint8_t svc_uuid[16] = DESK_SLE_SERVICE_UUID;
     static const char name[] = "XiaohongDesk";
-    uint8_t rsp[2 + 1 + sizeof(name) - 1u] = {0};
-    rsp[0] = (uint8_t)(1u + sizeof(name) - 1u);
-    rsp[1] = DESK_SLE_AD_TYPE_LOCAL_NAME;
+
+    /* announce data: discovery level + complete 128-bit service UUID list, so
+     * the Harmony client can find the device by service as well as by name. */
+    uint8_t adv[3 + 2 + 16];
+    size_t n = 0;
+    adv[n++] = DESK_SLE_AD_TYPE_DISCOVERY_LEVEL;
+    adv[n++] = 1u;
+    adv[n++] = 2u; /* SLE_ANNOUNCE_LEVEL_NORMAL */
+    adv[n++] = DESK_SLE_AD_TYPE_UUID128_LIST;
+    adv[n++] = 16u;
+    /* AD data carries multi-byte values little-endian, same as the 16-bit UUID
+     * in the SDK sample (0x0B, 0x06 == 0x060B). */
+    desk_uuid128_le(svc_uuid, &adv[n]);
+    n += sizeof(svc_uuid);
+
+    /* scan response: local name, same [type][length][value] layout. */
+    uint8_t rsp[2 + sizeof(name) - 1u];
+    rsp[0] = DESK_SLE_AD_TYPE_LOCAL_NAME;
+    rsp[1] = (uint8_t)(sizeof(name) - 1u);
     memcpy(&rsp[2], name, sizeof(name) - 1u);
 
     sle_announce_data_t data = {0};
-    data.announce_data = (uint8_t *)adv_data;
-    data.announce_data_len = (uint16_t)sizeof(adv_data);
+    data.announce_data = adv;
+    data.announce_data_len = (uint16_t)n;
     data.seek_rsp_data = rsp;
     data.seek_rsp_data_len = (uint16_t)sizeof(rsp);
     (void)sle_set_announce_data(DESK_SLE_ADV_HANDLE, &data);
@@ -681,22 +700,22 @@ static void desk_sle_announce_start(void)
     param.conn_interval_max = DESK_SLE_CONN_INTERVAL_MAX;
     param.conn_max_latency = DESK_SLE_CONN_MAX_LATENCY;
     param.conn_supervision_timeout = DESK_SLE_CONN_TIMEOUT;
-    (void)sle_set_announce_param(DESK_SLE_ADV_HANDLE, &param);
-    (void)sle_start_announce(DESK_SLE_ADV_HANDLE);
+    const errcode_t pr = sle_set_announce_param(DESK_SLE_ADV_HANDLE, &param);
+    const errcode_t ar = sle_start_announce(DESK_SLE_ADV_HANDLE);
+    osal_printk("[desk sle] announce param 0x%x start 0x%x\r\n", pr, ar);
 }
 
 static void sle_enable_cbk(errcode_t status)
 {
-    if (status != ERRCODE_SLE_SUCCESS) {
-        osal_printk("[desk sle] enable failed 0x%x\r\n", status);
-        return;
-    }
+    osal_printk("[desk sle] enable cbk status 0x%x\r\n", status);
+    if (status != ERRCODE_SLE_SUCCESS) return;
+
     if (!desk_sle_register_service()) {
         osal_printk("[desk sle] service registration failed\r\n");
         return;
     }
+    osal_printk("[desk sle] service ready, announcing as XiaohongDesk\r\n");
     desk_sle_announce_start();
-    osal_printk("[desk sle] service ready, announcing\r\n");
 }
 
 static void sle_connect_state_changed_cbk(uint16_t conn_id,
@@ -784,7 +803,8 @@ void desk_sle_start(void)
     ssaps_cbks.mtu_changed_cb = sle_mtu_changed_cbk;
     (void)ssaps_register_callbacks(&ssaps_cbks);
 
-    (void)enable_sle();
+    const errcode_t ret = enable_sle();
+    osal_printk("[desk sle] enable_sle 0x%x\r\n", ret);
 }
 #else
 bool desk_sle_register_service(void)

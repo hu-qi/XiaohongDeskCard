@@ -71,9 +71,9 @@
 ## 本地产物清单
 
 固件产物存放于本地 `xiaohong-firmware/`:
-- `ws63-liteos-app_all.fwpkg` (2,115,432 B)
-  - SHA-256: `54bf8822ebb7579803784db85925fe1622ff75a0f158f4aef931a689e3f4050b`
-  - 公开下载: <https://huqi-blog.obs.cn-north-4.myhuaweicloud.com/xiaohong-deskcard/ws63-liteos-app_all_9.9.0_54bf8822.fwpkg>
+- `ws63-liteos-app_all.fwpkg` (2,115,624 B)
+  - SHA-256: `a8239c137664ab634e611a0d1a75e53442295c1b15b559df69aa2898fd2605c0`
+  - 公开下载: <https://huqi-blog.obs.cn-north-4.myhuaweicloud.com/xiaohong-deskcard/ws63-liteos-app_all_9.9.0_a8239c13.fwpkg>
 - `ws63-liteos-app_load_only.fwpkg` (1,984,340 B)
   - SHA-256: `202dea365deea9686945354c60c014efb80b69c94c7ff418be333c19bb9dd60a`
 
@@ -82,7 +82,8 @@
 > 该版本修复了两个真机实测发现的 BLE 缺陷:
 >
 > 1. **已配网设备上 BLE 完全不存在** —— `enable_ble()` 此前只有配网任务一条调用路径,而已配网设备根本不会启动配网任务。现在由 UI 任务轮询自行使能并广播 `XiaohongDesk`,同时补上了连接状态回调(此前 `desk_ble_on_connect()` 从未被调用,导致 ACK 永远发不出去)。
-> 2. **128-bit UUID 字节序反了** —— BLE 栈按小端存储 UUID,而头文件宏是字符串顺序。真机枚举到的特征 UUID 是期望值的逐字节反序(`44b4cc5b-...` 变成 `52202e80-...`),导致客户端找不到特征、写入被静默丢弃。已加 `desk_uuid128_le()` 转换并配回归测试。
+> 2. **SLE 广播 AD 结构顺序反了** —— SLE 是 `[类型][长度][数据]`,BLE 是 `[长度][类型][数据]`。scan response 用了 BLE 顺序,协议栈直接丢弃整块,设备永远扫不到(但 `sle_start_announce` 返回成功,不报错)。同时补上了 128-bit 服务 UUID 广播,让鸿蒙可按服务发现。
+> 3. **128-bit UUID 字节序反了** —— BLE 栈按小端存储 UUID,而头文件宏是字符串顺序。真机枚举到的特征 UUID 是期望值的逐字节反序(`44b4cc5b-...` 变成 `52202e80-...`),导致客户端找不到特征、写入被静默丢弃。已加 `desk_uuid128_le()` 转换并配回归测试。
 
 ## 后续(XiaohongDeskCard Gate B 对接)
 

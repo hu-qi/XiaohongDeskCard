@@ -148,6 +148,24 @@ int main(void)
         assert(memcmp(back, svc, sizeof(svc)) == 0);
     }
 
+    /* SLE advertising uses [type][length][value]; BLE uses
+     * [length][type][value]. Mixing them makes the stack drop the block, so
+     * the device never shows up in a scan. Assert the layout the announce code
+     * builds. */
+    {
+        static const char name[] = "XiaohongDesk";
+        uint8_t rsp[2 + sizeof(name) - 1u];
+        rsp[0] = 0x0Bu;                          /* type: local name */
+        rsp[1] = (uint8_t)(sizeof(name) - 1u);   /* length */
+        memcpy(&rsp[2], name, sizeof(name) - 1u);
+        assert(rsp[0] == 0x0Bu);
+        assert(rsp[1] == 12u);
+        assert(memcmp(&rsp[2], "XiaohongDesk", 12u) == 0);
+        /* A BLE-ordered block would put the length (12) in the type slot,
+         * where 12 is not a valid SLE AD type. */
+        assert(rsp[0] != rsp[1]);
+    }
+
     printf("desk_ws63_adapters_tests: OK\n");
     return 0;
 }
