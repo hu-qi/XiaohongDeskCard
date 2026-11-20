@@ -140,7 +140,7 @@ static bool wait_for_station_ip(ip_addr_t *out)
     uint32_t waited_ms = 0u;
     while (!g_stop) {
         struct netif *netif_p = netifapi_netif_find(DESK_HTTP_IFNAME);
-        if (netif_p != NULL && netif_p->ip_addr.addr != 0u) {
+        if (netif_p != NULL && ip_addr_get_ip4_u32(&netif_p->ip_addr) != 0u) {
             *out = netif_p->ip_addr;
             return true;
         }
@@ -188,7 +188,8 @@ static void desk_http_task(void *arg)
                 /* A dropped link invalidates the bind address; go back and wait
                  * for the station to come up again. */
                 struct netif *netif_p = netifapi_netif_find(DESK_HTTP_IFNAME);
-                if (netif_p == NULL || netif_p->ip_addr.addr == 0u) break;
+                if (netif_p == NULL ||
+                    ip_addr_get_ip4_u32(&netif_p->ip_addr) == 0u) break;
                 osal_msleep(DESK_HTTP_POLL_MS);
                 continue;
             }
