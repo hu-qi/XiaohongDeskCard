@@ -29,8 +29,8 @@ CORE_SOURCES = (
     "desk_wifi_ingress.c",
     "desk_reply_mailbox.c",
 )
-UI_SOURCES = ("desk_view_lvgl.c", "desk_ws63_glue.c", "desk_ws63_cmsis.c",
-              "desk_ws63_board.c", "desk_ws63_transport.c",
+UI_SOURCES = ("desk_view_lvgl.c", "desk_font_cn_12.c", "desk_ws63_glue.c",
+              "desk_ws63_cmsis.c", "desk_ws63_board.c", "desk_ws63_transport.c",
               "desk_ws63_adapters.c", "desk_ws63_http.c")
 
 CORE_HEADERS = tuple(name.replace(".c", ".h") for name in CORE_SOURCES)
@@ -52,7 +52,7 @@ def files_to_stage(source_root: Path) -> list[tuple[Path, Path]]:
             Path("src/deskcard/include") / name,
         ))
     for name in UI_SOURCES:
-        folder = "display" if name.startswith("desk_view") else "platform/ws63"
+        folder = "display" if name.startswith("desk_view") or name.startswith("desk_font") else "platform/ws63"
         entries.append((
             source_root / "firmware" / folder / name,
             Path("src/deskcard") / name,

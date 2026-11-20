@@ -56,6 +56,9 @@ int main(void)
     desk_core_t core;
     desk_core_init(&core, hooks);
     assert(core.revision == 0u);
+    /* A fresh device must not render an empty header band: the default
+     * organization is what puts text in it before the first SET. */
+    assert(core.content.organization[0] != '\0');
     assert(desk_core_repaint(&core) == DESK_OK);
     desk_set_command_t cmd = command(42, 0);
     assert(desk_core_apply(&core, &cmd, false) == DESK_UNAUTHORIZED);

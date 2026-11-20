@@ -12,7 +12,7 @@ import sys
 import tempfile
 import unittest
 
-from tools.ws63_overlay import ROOT, CORE_SOURCES, UI_SOURCES, stage
+from tools.ws63_overlay import ROOT, CORE_SOURCES, UI_SOURCES, CORE_HEADERS, UI_HEADERS, stage
 from tools.ws63_gn_integrate import (
     BUILD, DEST, apply, patch_build_gn, prepare
 )
@@ -73,7 +73,8 @@ class GNIntegrationTests(unittest.TestCase):
         self.assertEqual(build, self.build)
         self.assertEqual(dest, self.dest)
         self.assertFalse(self.dest.exists())
-        self.assertEqual(len(files), (len(CORE_SOURCES) + len(UI_SOURCES)) * 2)
+        self.assertEqual(len(files), (len(CORE_SOURCES) + len(UI_SOURCES)) +
+                         (len(CORE_HEADERS) + len(UI_HEADERS)))
         self.assertIn('# DESKCARD-GN-BEGIN CORE', updated)
         self.assertIn('# DESKCARD-GN-BEGIN LVGL', updated)
         self.assertIn('src/deskcard/desk_ws63_cmsis.c', updated)

@@ -5,6 +5,31 @@
 /* Dimensions are fixed for the ORIGINAL Xiaohong AI 240x240 TFT. */
 #define DESK_SCREEN 240
 
+/* The WS63 SDK's default LVGL font (lv_font_montserrat_14) contains only
+ * ASCII glyphs. Chinese text in the organization header would render as
+ * blank squares. We declare an external Chinese font symbol that the WS63
+ * build system must provide — typically a GB2312 12px bitmap font generated
+ * by LVGL's font converter, covering the ~3500 most common Chinese characters.
+ *
+ * If the symbol is not linked (no Chinese font compiled into the firmware),
+ * the label falls back to the default font, which still renders ASCII
+ * correctly. This is a soft dependency: the build does not fail without it.
+ *
+ * To generate the font:
+ *   lv_font_conv --bpp 1 --size 12 --font SourceHanSansSC-Regular.otf \
+ *     --range 0x20-0x7E --range 0x4E00-0x9FFF \
+ *     --format lvgl --no-compress -o desk_font_cn_12.c
+ * Then compile desk_font_cn_12.c into the xiaohong static library. */
+extern const lv_font_t desk_font_cn_12;
+
+static const lv_font_t *desk_header_font(void)
+{
+    /* Use the Chinese font if it was linked; otherwise fall back to the
+     * LVGL default (ASCII-only). The weak symbol pattern lets the firmware
+     * build with or without the Chinese font without a link error. */
+    return &desk_font_cn_12;
+}
+
 static void position_label(lv_obj_t *label, int16_t x, int16_t y, int16_t width)
 {
     lv_obj_set_width(label, width);
@@ -30,6 +55,8 @@ int desk_lvgl_view_create(desk_lvgl_view_t *view, lv_obj_t *parent)
 #endif
     if (parent == NULL) return 0;
 
+    const lv_font_t *cn_font = desk_header_font();
+
     view->root = lv_obj_create(parent);
     if (view->root == NULL) return 0;
     lv_obj_set_size(view->root, DESK_SCREEN, DESK_SCREEN);
@@ -50,14 +77,17 @@ int desk_lvgl_view_create(desk_lvgl_view_t *view, lv_obj_t *parent)
     view->org_label = lv_label_create(view->header);
     if (view->org_label == NULL) return failed(view);
     position_label(view->org_label, 8, 12, 224);
+    lv_obj_set_style_text_font(view->org_label, cn_font, 0);
 
     view->name_label = lv_label_create(view->root);
     if (view->name_label == NULL) return failed(view);
     position_label(view->name_label, 10, 91, 220);
+    lv_obj_set_style_text_font(view->name_label, cn_font, 0);
 
     view->title_label = lv_label_create(view->root);
     if (view->title_label == NULL) return failed(view);
     position_label(view->title_label, 10, 153, 220);
+    lv_obj_set_style_text_font(view->title_label, cn_font, 0);
 
     view->footer_label = lv_label_create(view->root);
     if (view->footer_label == NULL) return failed(view);

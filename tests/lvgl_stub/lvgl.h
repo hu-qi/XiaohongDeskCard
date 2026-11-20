@@ -20,6 +20,11 @@ typedef struct _lv_obj_t {
     char text[256];
 } lv_obj_t;
 
+/* Minimal font type stub for host tests. */
+typedef struct {
+    void *dsc;
+} lv_font_t;
+
 typedef enum { LV_LABEL_LONG_WRAP = 0 } lv_label_long_mode_t;
 typedef enum { LV_TEXT_ALIGN_CENTER = 1 } lv_text_align_t;
 
@@ -37,6 +42,7 @@ void lv_obj_set_style_radius(lv_obj_t *obj, int32_t r, int32_t selector);
 void lv_obj_set_style_bg_opa(lv_obj_t *obj, uint8_t opa, int32_t selector);
 void lv_obj_set_style_bg_color(lv_obj_t *obj, lv_color_t c, int32_t selector);
 void lv_obj_set_style_text_color(lv_obj_t *obj, lv_color_t c, int32_t selector);
+void lv_obj_set_style_text_font(lv_obj_t *obj, const lv_font_t *font, int32_t selector);
 void lv_obj_set_style_text_align(lv_obj_t *obj, lv_text_align_t a, int32_t selector);
 void lv_label_set_long_mode(lv_obj_t *obj, lv_label_long_mode_t mode);
 void lv_label_set_text(lv_obj_t *obj, const char *text);

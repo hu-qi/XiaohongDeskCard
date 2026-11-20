@@ -9,7 +9,35 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "desk_packet.h"
+#include "desk_wire.h"
 #include "desk_ws63_board.h"
+
+/* Feed one Desk Wire frame as the BEGIN/CHUNK/COMMIT packets the Harmony
+ * client writes (DeskWireFrame.ets), through the desk command handle. */
+static void feed_frame(const uint8_t *frame, size_t flen)
+{
+    uint8_t pkt[64];
+    pkt[0] = DESK_PACKET_BEGIN;
+    pkt[1] = (uint8_t)flen;
+    pkt[2] = (uint8_t)(flen >> 8);
+    const uint32_t c = desk_wire_crc32(frame, flen);
+    pkt[3] = (uint8_t)c; pkt[4] = (uint8_t)(c >> 8);
+    pkt[5] = (uint8_t)(c >> 16); pkt[6] = (uint8_t)(c >> 24);
+    assert(desk_ble_on_write(0x0021u, pkt, 7u));
+
+    const size_t chunk = 20u - DESK_PACKET_CHUNK_HEADER;
+    for (size_t off = 0; off < flen; off += chunk) {
+        const size_t n = (flen - off) < chunk ? (flen - off) : chunk;
+        pkt[0] = DESK_PACKET_CHUNK;
+        pkt[1] = (uint8_t)off;
+        pkt[2] = (uint8_t)(off >> 8);
+        memcpy(pkt + 3, frame + off, n);
+        assert(desk_ble_on_write(0x0021u, pkt, 3u + n));
+    }
+    pkt[0] = DESK_PACKET_COMMIT;
+    assert(desk_ble_on_write(0x0021u, pkt, 1u));
+}
 
 static uint8_t g_slots[2][DESK_NV_RECORD_SIZE];
 
@@ -164,6 +192,43 @@ int main(void)
         /* A BLE-ordered block would put the length (12) in the type slot,
          * where 12 is not a valid SLE AD type. */
         assert(rsp[0] != rsp[1]);
+    }
+
+    /* Two consecutive commands on one BLE connection. The link marks itself
+     * "awaiting ACK" when a COMMIT is accepted; if that flag is never cleared
+     * the second write is rejected with DESK_RADIO_AWAITING_ACK and the card
+     * accepts exactly one update per connection. desk_ble_flush_ack() must
+     * clear it once the reply leaves the mailbox. */
+    {
+        desk_ble_test_set_handles(0x0021u, 0x0023u);
+        desk_ble_on_connect(7u);
+
+        desk_set_command_t cmd = {0};
+        strcpy(cmd.content.name, "张三");
+        strcpy(cmd.content.title, "工程师");
+        strcpy(cmd.content.organization, "小鸿科技");
+        strcpy(cmd.content.theme, "classic");
+
+        uint8_t frame[DESK_WIRE_MAX_FRAME];
+        size_t flen = 0;
+        cmd.request_id = 11u;
+        cmd.expected_revision = 0u;
+        assert(desk_wire_encode_set(&cmd, frame, sizeof(frame), &flen) ==
+               DESK_WIRE_OK);
+        feed_frame(frame, flen);
+        desk_board_poll();                 /* UI task applies + queues the ACK */
+        assert(desk_ble_flush_ack());      /* ACK leaves the mailbox */
+
+        /* Same connection, second command: revision 1 after the first apply. */
+        cmd.request_id = 12u;
+        cmd.expected_revision = 1u;
+        assert(desk_wire_encode_set(&cmd, frame, sizeof(frame), &flen) ==
+               DESK_WIRE_OK);
+        feed_frame(frame, flen);
+        desk_board_poll();
+        assert(desk_ble_flush_ack());
+
+        desk_ble_on_disconnect(7u);
     }
 
     printf("desk_ws63_adapters_tests: OK\n");

@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from tools.ws63_overlay import ROOT, stage, CORE_SOURCES, UI_SOURCES, gn_snippet
+from tools.ws63_overlay import ROOT, stage, CORE_SOURCES, UI_SOURCES, CORE_HEADERS, UI_HEADERS, gn_snippet
 
 
 class Ws63OverlayTests(unittest.TestCase):
@@ -16,12 +16,13 @@ class Ws63OverlayTests(unittest.TestCase):
             target = Path(folder) / "overlay"
             info = stage(ROOT, target)
             expected_sources = len(CORE_SOURCES) + len(UI_SOURCES)
+            expected_headers = len(CORE_HEADERS) + len(UI_HEADERS)
             self.assertEqual(info["sourceCount"], expected_sources)
-            self.assertEqual(info["headerCount"], expected_sources)
-            self.assertEqual(len(info["files"]), expected_sources * 2)
+            self.assertEqual(info["headerCount"], expected_headers)
+            self.assertEqual(len(info["files"]), expected_sources + expected_headers)
             self.assertEqual(
                 len(set(item["staged"] for item in info["files"])),
-                expected_sources * 2,
+                expected_sources + expected_headers,
             )
             for entry in info["files"]:
                 staged = target / entry["staged"]

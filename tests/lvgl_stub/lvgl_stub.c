@@ -4,6 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Stub for the Chinese font symbol so host tests link without the real
+ * 347 KB font data file. The real font is compiled only into the WS63
+ * firmware build. */
+const lv_font_t desk_font_cn_12 = { .dsc = NULL };
+
 static lv_obj_t screen = {0};
 static unsigned live = 0;
 
@@ -46,6 +51,8 @@ void lv_obj_set_style_bg_color(lv_obj_t *obj, lv_color_t c, int32_t selector)
 { (void)selector; obj->bg = c; }
 void lv_obj_set_style_text_color(lv_obj_t *obj, lv_color_t c, int32_t selector)
 { (void)selector; obj->fg = c; }
+void lv_obj_set_style_text_font(lv_obj_t *obj, const lv_font_t *font, int32_t selector)
+{ (void)obj; (void)font; (void)selector; }
 void lv_obj_set_style_text_align(lv_obj_t *obj, lv_text_align_t a, int32_t selector)
 { (void)obj; (void)a; (void)selector; }
 void lv_label_set_long_mode(lv_obj_t *obj, lv_label_long_mode_t mode)
