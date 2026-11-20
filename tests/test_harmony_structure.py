@@ -62,23 +62,37 @@ class HarmonyStructureTests(unittest.TestCase):
         for name in (
             "DeskModels.ets", "MockDeskTransport.ets", "WifiHttpTransport.ets",
             "NearLinkCapability.ets", "DeskWireFrame.ets",
-            "BleGattLink.ets", "SleSsapLink.ets",
+            "BleGattLink.ets", "SleSsapLink.ets", "RadioDeskTransport.ets",
             "DeskAckFrame.ets", "DeskAckWaiter.ets", "DeskServiceIds.ets",
             "DeskDeviceDiscovery.ets", "DeskPermissions.ets"
         ):
             with self.subTest(file=name):
                 self.assertTrue((desk / name).exists())
         page = (ROOT / "entry/src/main/ets/pages/Index.ets").read_text(encoding="utf-8")
-        self.assertIn("MockDeskTransport", page)
+        # The page must drive real radios, not the ArkTS mock.
+        self.assertIn("RadioDeskTransport", page)
         self.assertIn("WifiHttpTransport", page)
-        self.assertIn("BLE Mock", page)
-        self.assertIn("SLE Mock", page)
+        self.assertNotIn("MockDeskTransport", page)
+        self.assertNotIn("Mock'", page)
         self.assertIn("isNearLinkAvailable", page)
         self.assertIn("DeskPermissions.request", page)
         self.assertIn("new DeskDeviceDiscovery", page)
-        self.assertIn("扫描星闪设备", page)
+        self.assertIn("扫描星闪", page)
         self.assertIn("(_error: Error) => {}", page)
         self.assertNotIn("(_error) => {}", page)
+
+    def test_radio_transport_waits_for_the_device_ack(self):
+        radio = (ROOT / "entry/src/main/ets/desk/RadioDeskTransport.ets").read_text(
+            encoding="utf-8")
+        # A radio write is not proof of application: the ACK is mandatory.
+        self.assertIn("sendFrameAwaitAck", radio)
+        self.assertIn("DeskWireFrame.encodeSet", radio)
+        self.assertIn("DeskServiceIds.SERVICE", radio)
+        self.assertIn("DeskChannel.BLE", radio)
+        self.assertIn("DeskChannel.WIFI", radio)  # rejected: radio only
+        self.assertIn("new SleSsapLink", radio)
+        # BLE writes must respect the default-MTU payload, not the MTU.
+        self.assertIn("BLE_WRITE_BYTES", radio)
 
     def test_api_generation(self):
         nearlink = (ROOT / "entry/src/main/ets/desk/NearLinkCapability.ets").read_text(

@@ -39,4 +39,8 @@ export interface DeskTransport {
   readonly channel: DeskChannel;
   getStatus(): Promise<DeskState>;
   setContent(command: DeskSetCommand): Promise<DeskAck>;
+  /** Open the link. Radio transports need this; HTTP is stateless. */
+  connect?(): Promise<void>;
+  /** Release the link. Always called by the caller, even after a failure. */
+  close?(): Promise<void>;
 }

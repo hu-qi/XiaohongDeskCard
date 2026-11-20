@@ -71,6 +71,11 @@ void desk_core_init(desk_core_t *core, desk_hooks_t hooks)
     core->hooks = hooks;
     (void)strcpy(core->content.name, "Xiaohong");
     (void)strcpy(core->content.title, "Desk Card");
+    /* The organization renders in the coloured header band. An empty string
+     * leaves the band a solid colour block with no text at all, which reads
+     * as a rendering fault on a fresh device. Ship a Chinese default so the
+     * band is legible before the first SET. */
+    (void)strcpy(core->content.organization, "小鸿智能桌牌");
     (void)strcpy(core->content.theme, "classic");
 
     if (hooks.load != NULL) {

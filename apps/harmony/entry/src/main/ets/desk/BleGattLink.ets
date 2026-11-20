@@ -100,7 +100,7 @@ export class BleGattLink {
       this.notificationReady = true;
     } catch (err) {
       this.close();
-      throw err;
+      throw new Error(String(err));
     }
   }
 
@@ -133,7 +133,7 @@ export class BleGattLink {
       return await pending;
     } catch (err) {
       this.ackWaiter.fail('BLE transfer failed or ACK missing: ' + String(err));
-      throw err;
+      throw new Error(String(err));
     }
   }
 

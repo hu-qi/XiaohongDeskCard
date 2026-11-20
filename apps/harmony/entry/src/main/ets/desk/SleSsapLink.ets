@@ -71,7 +71,7 @@ export class SleSsapLink {
       this.notificationReady = true;
     } catch (err) {
       await this.close();
-      throw err;
+      throw new Error(String(err));
     }
   }
 
@@ -103,7 +103,7 @@ export class SleSsapLink {
       return await pending;
     } catch (err) {
       this.ackWaiter.fail('SLE transfer failed or ACK missing: ' + String(err));
-      throw err;
+      throw new Error(String(err));
     }
   }
 
