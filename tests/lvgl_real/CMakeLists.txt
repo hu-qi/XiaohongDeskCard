@@ -28,6 +28,7 @@ set_property(TARGET lvgl PROPERTY SOURCES "${_desk_lvgl_sources}")
 add_executable(test_lvgl_real
     test_lvgl_real.c
     ../../firmware/display/desk_view_lvgl.c
+    ../../firmware/display/desk_font_cn_12.c
     ../../firmware/core/src/desk_core.c)
 target_include_directories(test_lvgl_real PRIVATE
     ../../firmware/display
@@ -60,6 +61,7 @@ if(DEFINED DESK_CMSIS_HEADER_DIR AND DEFINED DESK_CMSIS_CORE_HEADER_DIR)
         ../../firmware/core/src/desk_wifi_ingress.c
         ../../firmware/core/src/desk_reply_mailbox.c
         ../../firmware/display/desk_view_lvgl.c
+        ../../firmware/display/desk_font_cn_12.c
         ../../firmware/platform/ws63/desk_ws63_glue.c
         ../../firmware/platform/ws63/desk_ws63_cmsis.c)
     target_include_directories(desk_ws63_bundle_real PUBLIC
