@@ -22,6 +22,10 @@
 
 # IDE / local credentials / certificates
 .DS_Store
+.arts/
+.codeartsdoer/
+**/.arts/
+**/.codeartsdoer/
 *.p12
 *.p7b
 *.cer
