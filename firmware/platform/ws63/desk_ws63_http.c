@@ -67,6 +67,57 @@ static const char *status_line(desk_http_result_t result)
     }
 }
 
+/* Case-insensitive search for "Content-Length:" in the header block. */
+static bool content_length(const char *headers, size_t *out)
+{
+    const char *p = headers;
+    while (*p != '\0') {
+        size_t i = 0;
+        static const char name[] = "content-length:";
+        while (name[i] != '\0' && p[i] != '\0') {
+            char a = p[i];
+            if (a >= 'A' && a <= 'Z') a = (char)(a - 'A' + 'a');
+            if (a != name[i]) break;
+            i++;
+        }
+        if (name[i] == '\0') {
+            const char *v = p + i;
+            while (*v == ' ' || *v == '\t') v++;
+            size_t n = 0u;
+            while (*v >= '0' && *v <= '9') {
+                n = n * 10u + (size_t)(*v - '0');
+                v++;
+            }
+            *out = n;
+            return true;
+        }
+        while (*p != '\0' && *p != '\n') p++;
+        if (*p == '\n') p++;
+    }
+    return false;
+}
+
+/* Append up to `want` more body bytes from the connection. */
+static size_t read_more_body(struct netconn *conn, uint8_t *dst, size_t cap)
+{
+    size_t got = 0u;
+    while (got < cap) {
+        struct netbuf *more = NULL;
+        if (netconn_recv(conn, &more) != ERR_OK || more == NULL) break;
+        char *chunk = NULL;
+        u16_t chunk_len = 0;
+        netbuf_data(more, (void **)&chunk, &chunk_len);
+        size_t copy = chunk_len;
+        if (copy > cap - got) copy = cap - got;
+        if (chunk != NULL && copy > 0u) {
+            memcpy(dst + got, chunk, copy);
+            got += copy;
+        }
+        netbuf_delete(more);
+    }
+    return got;
+}
+
 static void serve_one(struct netconn *conn)
 {
     struct netbuf *inbuf = NULL;
@@ -80,16 +131,15 @@ static void serve_one(struct netconn *conn)
         return;
     }
 
-    /* Copy into a NUL-terminated buffer: the adapters use C string helpers on
-     * the request line and the header block. */
+    /* NUL-terminated copy: the adapters use C string helpers on the request
+     * line and the header block. Single task, so a static buffer is safe and
+     * keeps 2 KB off the thread stack. */
     static char req[DESK_HTTP_REQ_MAX];
     size_t copy = buflen < sizeof(req) - 1u ? buflen : sizeof(req) - 1u;
     memcpy(req, buf, copy);
     req[copy] = '\0';
     netbuf_delete(inbuf);
 
-    /* A body larger than the first segment is not expected: the app sends at
-     * most four short fields, well under the 2 KB buffer. */
     char *line_end = strstr(req, "\r\n");
     if (line_end == NULL) return;
     const size_t line_len = (size_t)(line_end - req);
@@ -98,12 +148,24 @@ static void serve_one(struct netconn *conn)
     memcpy(request_line, req, line_len);
     request_line[line_len] = '\0';
 
-    const char *body_sep = strstr(req, "\r\n\r\n");
-    const uint8_t *body = NULL;
+    /* Terminate the header block at the blank line so the body is never
+     * scanned as a header. */
+    char *body_sep = strstr(req, "\r\n\r\n");
+    uint8_t *body = NULL;
     size_t body_len = 0u;
     if (body_sep != NULL) {
-        body = (const uint8_t *)(body_sep + 4);
-        body_len = strlen((const char *)body);
+        *body_sep = '\0';
+        body = (uint8_t *)(body_sep + 4);
+        body_len = copy - (size_t)(body - (uint8_t *)req);
+
+        /* The body may have arrived in a later segment than the headers. */
+        size_t want = 0u;
+        if (content_length(req, &want) && want > body_len) {
+            size_t more = want - body_len;
+            const size_t room = sizeof(req) - 1u - copy;
+            if (more > room) more = room;
+            body_len += read_more_body(conn, body + body_len, more);
+        }
     }
 
     char out[DESK_HTTP_MAX_RESPONSE];
