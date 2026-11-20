@@ -31,12 +31,12 @@ CORE_SOURCES = (
 )
 UI_SOURCES = ("desk_view_lvgl.c", "desk_ws63_glue.c", "desk_ws63_cmsis.c",
               "desk_ws63_board.c", "desk_ws63_transport.c",
-              "desk_ws63_adapters.c")
+              "desk_ws63_adapters.c", "desk_ws63_http.c")
 
 CORE_HEADERS = tuple(name.replace(".c", ".h") for name in CORE_SOURCES)
 UI_HEADERS = ("desk_view_lvgl.h", "desk_ws63_glue.h", "desk_ws63_cmsis.h",
               "desk_ws63_board.h", "desk_ws63_transport.h",
-              "desk_ws63_adapters.h")
+              "desk_ws63_adapters.h", "desk_ws63_http.h")
 
 
 def files_to_stage(source_root: Path) -> list[tuple[Path, Path]]:

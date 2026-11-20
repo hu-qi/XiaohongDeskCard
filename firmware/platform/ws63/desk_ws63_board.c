@@ -31,7 +31,9 @@
 #include "nv.h"
 
 #include "desk_nv_store.h"
+#include "desk_ws63_adapters.h"
 #include "desk_ws63_glue.h"
+#include "desk_ws63_http.h"
 #include "desk_ws63_transport.h"
 #endif
 
@@ -213,6 +215,20 @@ int desk_board_init(void)
     if (!desk_transport_init(&g_board.transport, &tcfg)) return 0;
 
     g_board.ready = true;
+
+#if !defined(DESK_BOARD_HOST_TEST)
+    /* Both of these are independent of the vendor's BLE provisioning task,
+     * which only runs when the device has no Wi-Fi config. Starting them from
+     * the UI task means a normal, already-provisioned device still gets SLE
+     * and the HTTP API.
+     *
+     * The BLE GATT service is NOT registered here: gatts_register_server()
+     * requires enable_ble() to have completed, so it is registered from the
+     * vendor's own BLE-enable callback (see tools/ws63_transport_hook.py).
+     * The HTTP listener waits for the station to get an IP by itself. */
+    desk_sle_start();
+    (void)desk_http_task_start();
+#endif
     return 1;
 }
 
@@ -225,6 +241,13 @@ void desk_board_poll(void)
 {
     if (!g_board.ready) return;
     (void)desk_ws63_port_ui_drain(&g_board.port);
+#if !defined(DESK_BOARD_HOST_TEST)
+    /* The ACKs Desk Core just produced must go out on whichever link asked.
+     * The vendor only runs its BLE provisioning task while there is no Wi-Fi
+     * config, so the UI task is the one place that always runs: pump from
+     * here rather than from a radio worker. */
+    (void)desk_radio_flush_acks();
+#endif
 }
 
 int desk_board_is_ready(void)

@@ -7,8 +7,16 @@
 
 #if !defined(DESK_ADAPTERS_HOST_TEST)
 #include "bts_gatt_server.h"
+#include "bts_gatt_stru.h"
 #include "errcode.h"
 #include "osal_debug.h"
+#include "osal_task.h"
+#include "sle_common.h"
+#include "sle_connection_manager.h"
+#include "sle_device_discovery.h"
+#include "sle_errcode.h"
+#include "sle_ssap_server.h"
+#include "sle_ssap_stru.h"
 #endif
 
 /* ---- shared state ---- */
@@ -18,10 +26,8 @@ static bool g_connected;
 
 /* Handles are discovered at service-registration time. */
 static uint16_t g_cmd_handle;
-static bool g_registered;
-#if !defined(DESK_ADAPTERS_HOST_TEST)
 static uint16_t g_ack_handle;
-#endif
+static bool g_registered;
 
 #if !defined(DESK_ADAPTERS_HOST_TEST)
 static uint8_t g_server_id;
@@ -33,6 +39,39 @@ void desk_ble_set_handles(uint8_t server_id, uint16_t cmd_handle,
     g_cmd_handle = cmd_handle;
     g_ack_handle = ack_handle;
     g_registered = true;
+}
+#endif
+
+/* ---- SLE state ---- */
+
+static uint16_t g_sle_conn_id;
+static bool g_sle_connected;
+static uint16_t g_sle_cmd_handle;
+static uint16_t g_sle_ack_handle;
+static bool g_sle_registered;
+
+#if !defined(DESK_ADAPTERS_HOST_TEST)
+static uint8_t g_sle_server_id;
+#endif
+
+static void sle_set_handles(uint16_t cmd_handle, uint16_t ack_handle)
+{
+    g_sle_cmd_handle = cmd_handle;
+    g_sle_ack_handle = ack_handle;
+    g_sle_registered = (cmd_handle != 0u);
+}
+
+#if defined(DESK_ADAPTERS_HOST_TEST)
+void desk_ble_test_set_handles(uint16_t cmd_handle, uint16_t ack_handle)
+{
+    g_cmd_handle = cmd_handle;
+    g_ack_handle = ack_handle;
+    g_registered = (cmd_handle != 0u);
+}
+
+void desk_sle_test_set_handles(uint16_t cmd_handle, uint16_t ack_handle)
+{
+    sle_set_handles(cmd_handle, ack_handle);
 }
 #endif
 
@@ -95,6 +134,436 @@ bool desk_ble_flush_ack(void)
 #endif
 }
 
+#if !defined(DESK_ADAPTERS_HOST_TEST)
+/*
+ * Register the Desk Card GATT service next to the vendor provisioning service.
+ * A separate server id is used on purpose: gatts_register_callbacks() is global
+ * and the vendor already installed it, so this server is served by that same
+ * callback. The vendor's write handler must forward handles it does not own to
+ * desk_ble_on_write().
+ */
+bool desk_ble_register_service(void)
+{
+    if (desk_board_transport() == NULL) return false;
+    if (g_registered) return true;
+
+    static const uint8_t svc_uuid[16] = DESK_BLE_SERVICE_UUID;
+    static const uint8_t cmd_uuid[16] = DESK_BLE_COMMAND_UUID;
+    static const uint8_t ack_uuid[16] = DESK_BLE_ACK_UUID;
+
+    bt_uuid_t app_uuid = {0};
+    app_uuid.uuid_len = 16;
+    memcpy(app_uuid.uuid, svc_uuid, sizeof(svc_uuid));
+
+    uint8_t server_id = 0;
+    if (gatts_register_server(&app_uuid, &server_id) != ERRCODE_BT_SUCCESS)
+        return false;
+
+    bt_uuid_t service_uuid = {0};
+    service_uuid.uuid_len = 16;
+    memcpy(service_uuid.uuid, svc_uuid, sizeof(svc_uuid));
+    uint16_t service_handle = 0;
+    if (gatts_add_service_sync(server_id, &service_uuid, true,
+                               &service_handle) != ERRCODE_BT_SUCCESS)
+        return false;
+
+    uint8_t init_value[1] = {0};
+
+    gatts_add_chara_info_t cmd = {0};
+    gatts_add_character_result_t cmd_result = {0};
+    cmd.chara_uuid.uuid_len = 16;
+    memcpy(cmd.chara_uuid.uuid, cmd_uuid, sizeof(cmd_uuid));
+    cmd.properties = GATT_CHARACTER_PROPERTY_BIT_WRITE |
+                     GATT_CHARACTER_PROPERTY_BIT_WRITE_NO_RSP;
+    cmd.permissions = GATT_ATTRIBUTE_PERMISSION_WRITE;
+    cmd.value_len = sizeof(init_value);
+    cmd.value = init_value;
+    if (gatts_add_characteristic_sync(server_id, service_handle, &cmd,
+                                      &cmd_result) != ERRCODE_BT_SUCCESS)
+        return false;
+
+    gatts_add_chara_info_t ack = {0};
+    gatts_add_character_result_t ack_result = {0};
+    ack.chara_uuid.uuid_len = 16;
+    memcpy(ack.chara_uuid.uuid, ack_uuid, sizeof(ack_uuid));
+    ack.properties = GATT_CHARACTER_PROPERTY_BIT_NOTIFY;
+    ack.permissions = GATT_ATTRIBUTE_PERMISSION_READ;
+    ack.value_len = sizeof(init_value);
+    ack.value = init_value;
+    if (gatts_add_characteristic_sync(server_id, service_handle, &ack,
+                                      &ack_result) != ERRCODE_BT_SUCCESS)
+        return false;
+
+    uint16_t ccc_handle = 0;
+    uint8_t ccc_value[2] = {0, 0};
+    gatts_add_desc_info_t ccc = {0};
+    ccc.desc_uuid.uuid_len = 2;
+    ccc.desc_uuid.uuid[0] = 0x29;
+    ccc.desc_uuid.uuid[1] = 0x02; /* Client Characteristic Configuration */
+    ccc.permissions = GATT_ATTRIBUTE_PERMISSION_READ |
+                      GATT_ATTRIBUTE_PERMISSION_WRITE;
+    ccc.value_len = sizeof(ccc_value);
+    ccc.value = ccc_value;
+    if (gatts_add_descriptor_sync(server_id, service_handle, &ccc,
+                                  &ccc_handle) != ERRCODE_BT_SUCCESS)
+        return false;
+
+    if (gatts_start_service(server_id, service_handle) != ERRCODE_BT_SUCCESS)
+        return false;
+
+    desk_ble_set_handles(server_id, cmd_result.value_handle,
+                         ack_result.value_handle);
+    return true;
+}
+#else
+bool desk_ble_register_service(void)
+{
+    return false;
+}
+#endif
+
+/* ---- worker pumps ---- */
+
+int desk_radio_flush_acks(void)
+{
+    int sent = 0;
+    while (desk_ble_flush_ack()) sent++;
+    while (desk_sle_flush_ack()) sent++;
+    return sent;
+}
+
+/* ---- SLE (NearLink) ---- */
+
+bool desk_sle_owns_handle(uint16_t handle)
+{
+    return g_sle_registered && handle != 0u && handle == g_sle_cmd_handle;
+}
+
+bool desk_sle_on_write(uint16_t conn_id, uint16_t handle, const uint8_t *value,
+                       uint16_t len)
+{
+    if (!desk_sle_owns_handle(handle)) return false;
+    desk_transport_t *t = desk_board_transport();
+    if (t == NULL || value == NULL || len == 0u) return true;
+    (void)conn_id;
+    const uint32_t now = 0u; /* Adapt to osKernelGetTickCount() on device. */
+    (void)desk_transport_sle_write(t, t->sle_generation, value, len, now);
+    return true;
+}
+
+void desk_sle_on_connect(uint16_t conn_id)
+{
+    desk_transport_t *t = desk_board_transport();
+    if (t == NULL) return;
+    g_sle_conn_id = conn_id;
+    g_sle_connected = true;
+    const uint32_t gen = desk_transport_sle_open(t);
+    /* SLE pairing/encryption is the trust anchor, exactly as with BLE. */
+    if (gen != 0u) t->sle.authorized = true;
+}
+
+void desk_sle_on_disconnect(uint16_t conn_id)
+{
+    desk_transport_t *t = desk_board_transport();
+    if (t == NULL) return;
+    if (g_sle_connected && conn_id == g_sle_conn_id) {
+        desk_transport_sle_close(t, t->sle_generation);
+        g_sle_connected = false;
+    }
+}
+
+bool desk_sle_flush_ack(void)
+{
+    desk_transport_t *t = desk_board_transport();
+    if (t == NULL || !g_sle_connected || !g_sle_registered) return false;
+
+    uint8_t ack[DESK_ACK_SIZE];
+    if (!desk_transport_sle_take_ack(t, t->sle_generation, ack)) return false;
+
+#if !defined(DESK_ADAPTERS_HOST_TEST)
+    ssaps_ntf_ind_t param = {0};
+    param.handle = g_sle_ack_handle;
+    param.type = SSAP_PROPERTY_TYPE_VALUE;
+    param.value_len = DESK_ACK_SIZE;
+    param.value = ack;
+    return ssaps_notify_indicate(g_sle_server_id, g_sle_conn_id, &param) ==
+           ERRCODE_SLE_SUCCESS;
+#else
+    return true;
+#endif
+}
+
+#if !defined(DESK_ADAPTERS_HOST_TEST)
+/* ---- SLE SDK glue: the only part of this file that talks to the SLE stack. */
+
+#define DESK_SLE_ADV_HANDLE 1u
+#define DESK_SLE_ADV_INTERVAL_MIN 0xC8u /* 25 ms in 125 us units */
+#define DESK_SLE_ADV_INTERVAL_MAX 0xC8u
+#define DESK_SLE_CONN_INTERVAL_MIN 0x14u /* 2.5 ms */
+#define DESK_SLE_CONN_INTERVAL_MAX 0x14u
+#define DESK_SLE_CONN_MAX_LATENCY 0x1F3u
+#define DESK_SLE_CONN_TIMEOUT 0x1F4u /* 5 s in 10 ms units */
+#define DESK_SLE_ADV_TX_POWER 20
+
+/* AD structure types (SDK sample headers do not export them). */
+#define DESK_SLE_AD_TYPE_DISCOVERY_LEVEL 0x01u
+#define DESK_SLE_AD_TYPE_UUID16_LIST 0x05u
+#define DESK_SLE_AD_TYPE_LOCAL_NAME 0x0Bu
+#define DESK_SLE_AD_TYPE_TX_POWER 0x0Cu
+
+static void sle_uuid128(const uint8_t bytes[16], sle_uuid_t *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->len = 16u;
+    memcpy(out->uuid, bytes, 16u);
+}
+
+static errcode_t sle_add_service_and_properties(void)
+{
+    static const uint8_t svc_uuid[16] = DESK_SLE_SERVICE_UUID;
+    static const uint8_t cmd_uuid[16] = DESK_SLE_COMMAND_UUID;
+    static const uint8_t ack_uuid[16] = DESK_SLE_ACK_UUID;
+
+    sle_uuid_t app_uuid;
+    sle_uuid128(svc_uuid, &app_uuid);
+    uint8_t server_id = 0;
+    errcode_t ret = ssaps_register_server(&app_uuid, &server_id);
+    if (ret != ERRCODE_SLE_SUCCESS) return ret;
+
+    sle_uuid_t service_uuid;
+    sle_uuid128(svc_uuid, &service_uuid);
+    uint16_t service_handle = 0;
+    ret = ssaps_add_service_sync(server_id, &service_uuid, true,
+                                 &service_handle);
+    if (ret != ERRCODE_SLE_SUCCESS) {
+        (void)ssaps_unregister_server(server_id);
+        return ret;
+    }
+
+    /* Command: write-only, so a client cannot read another peer's frames. */
+    uint8_t cmd_value[1] = {0};
+    ssaps_property_info_t cmd = {0};
+    sle_uuid128(cmd_uuid, &cmd.uuid);
+    cmd.permissions = SSAP_PERMISSION_WRITE;
+    cmd.operate_indication = SSAP_OPERATE_INDICATION_BIT_WRITE;
+    cmd.value_len = sizeof(cmd_value);
+    cmd.value = cmd_value;
+    uint16_t cmd_handle = 0;
+    ret = ssaps_add_property_sync(server_id, service_handle, &cmd, &cmd_handle);
+    if (ret != ERRCODE_SLE_SUCCESS) {
+        (void)ssaps_unregister_server(server_id);
+        return ret;
+    }
+
+    /* ACK: notify-only. The Harmony client subscribes to propertyChange. */
+    uint8_t ack_value[DESK_ACK_SIZE] = {0};
+    ssaps_property_info_t ack = {0};
+    sle_uuid128(ack_uuid, &ack.uuid);
+    ack.permissions = SSAP_PERMISSION_READ;
+    ack.operate_indication = SSAP_OPERATE_INDICATION_BIT_NOTIFY;
+    ack.value_len = sizeof(ack_value);
+    ack.value = ack_value;
+    uint16_t ack_handle = 0;
+    ret = ssaps_add_property_sync(server_id, service_handle, &ack, &ack_handle);
+    if (ret != ERRCODE_SLE_SUCCESS) {
+        (void)ssaps_unregister_server(server_id);
+        return ret;
+    }
+
+    /* Client Characteristic Configuration, so the peer can enable notify. */
+    uint8_t ccc_value[2] = {0, 0};
+    ssaps_desc_info_t ccc = {0};
+    memset(&ccc.uuid, 0, sizeof(ccc.uuid));
+    ccc.uuid.len = 2u;
+    ccc.uuid.uuid[0] = 0x29;
+    ccc.uuid.uuid[1] = 0x02;
+    ccc.permissions = SSAP_PERMISSION_READ | SSAP_PERMISSION_WRITE;
+    ccc.operate_indication = SSAP_OPERATE_INDICATION_BIT_READ |
+                             SSAP_OPERATE_INDICATION_BIT_WRITE;
+    ccc.type = SSAP_DESCRIPTOR_CLIENT_CONFIGURATION;
+    ccc.value_len = sizeof(ccc_value);
+    ccc.value = ccc_value;
+    ret = ssaps_add_descriptor_sync(server_id, service_handle, ack_handle, &ccc);
+    if (ret != ERRCODE_SLE_SUCCESS) {
+        (void)ssaps_unregister_server(server_id);
+        return ret;
+    }
+
+    ret = ssaps_start_service(server_id, service_handle);
+    if (ret != ERRCODE_SLE_SUCCESS) {
+        (void)ssaps_unregister_server(server_id);
+        return ret;
+    }
+
+    /* MTU large enough for a 384-byte wire frame plus SSAP overhead. */
+    ssap_exchange_info_t info = {0};
+    info.mtu_size = 512u;
+    info.version = 1u;
+    (void)ssaps_set_info(server_id, &info);
+
+    g_sle_server_id = server_id;
+    sle_set_handles(cmd_handle, ack_handle);
+    return ERRCODE_SLE_SUCCESS;
+}
+
+bool desk_sle_register_service(void)
+{
+    if (desk_board_transport() == NULL) return false;
+    if (g_sle_registered) return true;
+    return sle_add_service_and_properties() == ERRCODE_SLE_SUCCESS;
+}
+
+static void desk_sle_announce_start(void)
+{
+    static const uint8_t adv_data[] = {
+        /* discovery level: normally discoverable */
+        DESK_SLE_AD_TYPE_DISCOVERY_LEVEL, 1u, 2u,
+        /* complete 16-bit service UUID list (none; the desk service is
+         * 128-bit and is discovered after connecting) */
+        DESK_SLE_AD_TYPE_TX_POWER, 1u, DESK_SLE_ADV_TX_POWER,
+    };
+    static const char name[] = "XiaohongDesk";
+    uint8_t rsp[2 + 1 + sizeof(name) - 1u] = {0};
+    rsp[0] = (uint8_t)(1u + sizeof(name) - 1u);
+    rsp[1] = DESK_SLE_AD_TYPE_LOCAL_NAME;
+    memcpy(&rsp[2], name, sizeof(name) - 1u);
+
+    sle_announce_data_t data = {0};
+    data.announce_data = (uint8_t *)adv_data;
+    data.announce_data_len = (uint16_t)sizeof(adv_data);
+    data.seek_rsp_data = rsp;
+    data.seek_rsp_data_len = (uint16_t)sizeof(rsp);
+    (void)sle_set_announce_data(DESK_SLE_ADV_HANDLE, &data);
+
+    sle_announce_param_t param = {0};
+    param.announce_handle = DESK_SLE_ADV_HANDLE;
+    param.announce_mode = SLE_ANNOUNCE_MODE_CONNECTABLE_SCANABLE;
+    param.announce_gt_role = SLE_ANNOUNCE_ROLE_T_CAN_NEGO;
+    param.announce_level = SLE_ANNOUNCE_LEVEL_NORMAL;
+    param.announce_channel_map = 0x07u;
+    param.announce_interval_min = DESK_SLE_ADV_INTERVAL_MIN;
+    param.announce_interval_max = DESK_SLE_ADV_INTERVAL_MAX;
+    param.announce_tx_power = DESK_SLE_ADV_TX_POWER;
+    param.conn_interval_min = DESK_SLE_CONN_INTERVAL_MIN;
+    param.conn_interval_max = DESK_SLE_CONN_INTERVAL_MAX;
+    param.conn_max_latency = DESK_SLE_CONN_MAX_LATENCY;
+    param.conn_supervision_timeout = DESK_SLE_CONN_TIMEOUT;
+    (void)sle_set_announce_param(DESK_SLE_ADV_HANDLE, &param);
+    (void)sle_start_announce(DESK_SLE_ADV_HANDLE);
+}
+
+static void sle_enable_cbk(errcode_t status)
+{
+    if (status != ERRCODE_SLE_SUCCESS) {
+        osal_printk("[desk sle] enable failed 0x%x\r\n", status);
+        return;
+    }
+    if (!desk_sle_register_service()) {
+        osal_printk("[desk sle] service registration failed\r\n");
+        return;
+    }
+    desk_sle_announce_start();
+    osal_printk("[desk sle] service ready, announcing\r\n");
+}
+
+static void sle_connect_state_changed_cbk(uint16_t conn_id,
+                                          const sle_addr_t *addr,
+                                          sle_acb_state_t conn_state,
+                                          sle_pair_state_t pair_state,
+                                          sle_disc_reason_t disc_reason)
+{
+    (void)addr;
+    (void)pair_state;
+    (void)disc_reason;
+    if (conn_state == SLE_ACB_STATE_CONNECTED) {
+        desk_sle_on_connect(conn_id);
+    } else if (conn_state == SLE_ACB_STATE_DISCONNECTED) {
+        desk_sle_on_disconnect(conn_id);
+        desk_sle_announce_start();
+    }
+}
+
+static void sle_write_request_cbk(uint8_t server_id, uint16_t conn_id,
+                                  ssaps_req_write_cb_t *write_cb_para,
+                                  errcode_t status)
+{
+    if (status != ERRCODE_SLE_SUCCESS || write_cb_para == NULL) return;
+    if (server_id != g_sle_server_id) return;
+
+    const bool ours = desk_sle_on_write(conn_id, write_cb_para->handle,
+                                        write_cb_para->value,
+                                        write_cb_para->length);
+    if (write_cb_para->need_rsp) {
+        ssaps_send_rsp_t rsp = {0};
+        rsp.request_id = write_cb_para->request_id;
+        rsp.status = ours ? (uint8_t)ERRCODE_SLE_SUCCESS
+                          : (uint8_t)ERRCODE_SLE_FAIL;
+        rsp.value_len = 0;
+        rsp.value = NULL;
+        (void)ssaps_send_response(server_id, conn_id, &rsp);
+    }
+}
+
+static void sle_read_request_cbk(uint8_t server_id, uint16_t conn_id,
+                                 ssaps_req_read_cb_t *read_cb_para,
+                                 errcode_t status)
+{
+    if (status != ERRCODE_SLE_SUCCESS || read_cb_para == NULL) return;
+    ssaps_send_rsp_t rsp = {0};
+    rsp.request_id = read_cb_para->request_id;
+    rsp.status = (uint8_t)ERRCODE_SLE_SUCCESS;
+    rsp.value_len = 0;
+    rsp.value = NULL;
+    (void)ssaps_send_response(server_id, conn_id, &rsp);
+}
+
+static void sle_mtu_changed_cbk(uint8_t server_id, uint16_t conn_id,
+                                ssap_exchange_info_t *mtu_size,
+                                errcode_t status)
+{
+    (void)server_id;
+    (void)conn_id;
+    (void)mtu_size;
+    (void)status;
+}
+
+/* Adapt the platform sleep to the hook signature the HTTP wait loop uses. */
+static void desk_sleep_ms(uint32_t ms)
+{
+    (void)osal_msleep(ms);
+}
+
+void desk_sle_start(void)
+{
+    desk_http_set_wait_hook(desk_sleep_ms);
+
+    sle_announce_seek_callbacks_t seek_cbks = {0};
+    seek_cbks.sle_enable_cb = sle_enable_cbk;
+    (void)sle_announce_seek_register_callbacks(&seek_cbks);
+
+    sle_connection_callbacks_t conn_cbks = {0};
+    conn_cbks.connect_state_changed_cb = sle_connect_state_changed_cbk;
+    (void)sle_connection_register_callbacks(&conn_cbks);
+
+    ssaps_callbacks_t ssaps_cbks = {0};
+    ssaps_cbks.write_request_cb = sle_write_request_cbk;
+    ssaps_cbks.read_request_cb = sle_read_request_cbk;
+    ssaps_cbks.mtu_changed_cb = sle_mtu_changed_cbk;
+    (void)ssaps_register_callbacks(&ssaps_cbks);
+
+    (void)enable_sle();
+}
+#else
+bool desk_sle_register_service(void)
+{
+    return false;
+}
+
+void desk_sle_start(void)
+{
+}
+#endif
+
 /* ---- HTTP ---- */
 
 static bool header_value(const char *headers, const char *name, size_t name_len,
@@ -141,6 +610,37 @@ static bool path_is(const char *request_line, const char *method,
     return p[plen] == ' ' || p[plen] == '?' || p[plen] == '\0';
 }
 
+/*
+ * The UI task (LvglTask) is the only consumer of the dispatcher queue and it
+ * polls every few milliseconds. The HTTP worker therefore waits here instead
+ * of returning an empty 200 that the app would read as "no content".
+ *
+ * sleep_ms is supplied by the platform (osal_msleep on device, NULL in host
+ * tests where the UI task has already run).
+ */
+static void (*g_sleep_ms)(uint32_t ms);
+
+void desk_http_set_wait_hook(void (*sleep_ms)(uint32_t ms))
+{
+    g_sleep_ms = sleep_ms;
+}
+
+#define DESK_HTTP_WAIT_STEP_MS 5u
+#define DESK_HTTP_WAIT_MAX_MS 1000u
+
+static bool take_reply_wait(desk_transport_t *t, uint32_t peer,
+                            desk_reply_item_t *item)
+{
+    if (desk_transport_http_take_reply(t, peer, item)) return true;
+    if (g_sleep_ms == NULL) return false;
+    for (uint32_t waited = 0; waited < DESK_HTTP_WAIT_MAX_MS;
+         waited += DESK_HTTP_WAIT_STEP_MS) {
+        g_sleep_ms(DESK_HTTP_WAIT_STEP_MS);
+        if (desk_transport_http_take_reply(t, peer, item)) return true;
+    }
+    return false;
+}
+
 desk_http_result_t desk_http_handle_request(const char *request_line,
                                             const char *headers,
                                             const uint8_t *body,
@@ -174,12 +674,12 @@ desk_http_result_t desk_http_handle_request(const char *request_line,
         if (rc == -429) return DESK_HTTP_HANDLED_BUSY;
         if (rc != 0) return DESK_HTTP_HANDLED_BAD;
 
-        /* The UI task processes the queued write on its next poll; the HTTP
-         * worker polls desk_http_take_reply() until the ACK arrives. */
+        /* The UI task processes the queued write on its next poll; wait for the
+         * ACK so the response body reflects the real Desk Core result. */
         desk_reply_item_t item;
-        if (!desk_transport_http_take_reply(t, request_id, &item)) {
+        if (!take_reply_wait(t, request_id, &item)) {
             *out_len = 0;
-            return DESK_HTTP_HANDLED_OK; /* 202-ish: accepted, no body yet. */
+            return DESK_HTTP_HANDLED_OK; /* accepted, UI task did not answer. */
         }
         desk_ack_t ack;
         if (item.kind == DESK_REPLY_ACK &&
@@ -200,8 +700,7 @@ desk_http_result_t desk_http_handle_request(const char *request_line,
         return DESK_HTTP_HANDLED_UNAUTH;
 
     desk_reply_item_t item;
-    if (!desk_transport_http_take_reply(t, peer, &item) ||
-        item.kind != DESK_REPLY_STATUS) {
+    if (!take_reply_wait(t, peer, &item) || item.kind != DESK_REPLY_STATUS) {
         *out_len = 0;
         return DESK_HTTP_HANDLED_OK;
     }

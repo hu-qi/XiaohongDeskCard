@@ -107,6 +107,25 @@ int main(void)
 
     /* BLE handle routing: nothing registered, so nothing is claimed. */
     assert(!desk_ble_on_write(1u, (const uint8_t *)"x", 1u));
+    assert(!desk_sle_on_write(1u, 1u, (const uint8_t *)"x", 1u));
+    assert(!desk_sle_owns_handle(1u));
+    assert(!desk_sle_flush_ack());
+
+    /* BLE: register the handles the service table would produce. */
+    desk_ble_test_set_handles(0x0021u, 0x0023u);
+    assert(desk_ble_owns_handle(0x0021u));
+    assert(!desk_ble_owns_handle(0x0022u));
+    /* A write on our handle is accepted; on a foreign handle it is refused so
+     * the vendor's provisioning callback keeps it. */
+    assert(desk_ble_on_write(0x0021u, (const uint8_t *)"x", 1u));
+    assert(!desk_ble_on_write(0x0022u, (const uint8_t *)"x", 1u));
+
+    /* SLE: same routing rules, independent handle space. */
+    desk_sle_test_set_handles(0x0041u, 0x0043u);
+    assert(desk_sle_owns_handle(0x0041u));
+    assert(!desk_sle_owns_handle(0x0043u));
+    assert(desk_sle_on_write(1u, 0x0041u, (const uint8_t *)"x", 1u));
+    assert(!desk_sle_on_write(1u, 0x0042u, (const uint8_t *)"x", 1u));
 
     printf("desk_ws63_adapters_tests: OK\n");
     return 0;
