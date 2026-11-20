@@ -165,11 +165,12 @@ static void desk_ble_start_adv(void)
     static const uint8_t svc_uuid[16] = DESK_BLE_SERVICE_UUID;
     static const char name[] = "XiaohongDesk";
 
-    /* Flags + complete list of 128-bit service UUIDs (0x07). */
+    /* Flags + complete list of 128-bit service UUIDs (0x07). Advertising data
+     * carries the UUID little-endian, same as the GATT table. */
     uint8_t adv[3 + 2 + 16];
     adv[0] = 0x02; adv[1] = 0x01; adv[2] = 0x06;
     adv[3] = 0x11; adv[4] = 0x07;
-    memcpy(&adv[5], svc_uuid, sizeof(svc_uuid));
+    for (size_t i = 0; i < 16u; i++) adv[5u + i] = svc_uuid[15u - i];
 
     uint8_t rsp[2 + sizeof(name) - 1u];
     rsp[0] = (uint8_t)(1u + sizeof(name) - 1u);
@@ -349,13 +350,6 @@ void desk_ble_poll(void)
     if (!g_ble_owned) desk_ble_begin();
 }
 
-/*
- * Register the Desk Card GATT service next to the vendor provisioning service.
- * A separate server id is used on purpose: gatts_register_callbacks() is global
- * and the vendor already installed it, so this server is served by that same
- * callback. The vendor's write handler must forward handles it does not own to
- * desk_ble_on_write().
- */
 bool desk_ble_register_service(void)
 {
     if (desk_board_transport() == NULL) return false;
@@ -366,16 +360,16 @@ bool desk_ble_register_service(void)
     static const uint8_t ack_uuid[16] = DESK_BLE_ACK_UUID;
 
     bt_uuid_t app_uuid = {0};
-    app_uuid.uuid_len = 16;
-    memcpy(app_uuid.uuid, svc_uuid, sizeof(svc_uuid));
+    app_uuid.uuid_len = 16u;
+    desk_uuid128_le(svc_uuid, app_uuid.uuid);
 
     uint8_t server_id = 0;
     if (gatts_register_server(&app_uuid, &server_id) != ERRCODE_BT_SUCCESS)
         return false;
 
     bt_uuid_t service_uuid = {0};
-    service_uuid.uuid_len = 16;
-    memcpy(service_uuid.uuid, svc_uuid, sizeof(svc_uuid));
+    service_uuid.uuid_len = 16u;
+    desk_uuid128_le(svc_uuid, service_uuid.uuid);
     uint16_t service_handle = 0;
     if (gatts_add_service_sync(server_id, &service_uuid, true,
                                &service_handle) != ERRCODE_BT_SUCCESS)
@@ -385,8 +379,8 @@ bool desk_ble_register_service(void)
 
     gatts_add_chara_info_t cmd = {0};
     gatts_add_character_result_t cmd_result = {0};
-    cmd.chara_uuid.uuid_len = 16;
-    memcpy(cmd.chara_uuid.uuid, cmd_uuid, sizeof(cmd_uuid));
+    cmd.chara_uuid.uuid_len = 16u;
+    desk_uuid128_le(cmd_uuid, cmd.chara_uuid.uuid);
     cmd.properties = GATT_CHARACTER_PROPERTY_BIT_WRITE |
                      GATT_CHARACTER_PROPERTY_BIT_WRITE_NO_RSP;
     cmd.permissions = GATT_ATTRIBUTE_PERMISSION_WRITE;
@@ -398,8 +392,8 @@ bool desk_ble_register_service(void)
 
     gatts_add_chara_info_t ack = {0};
     gatts_add_character_result_t ack_result = {0};
-    ack.chara_uuid.uuid_len = 16;
-    memcpy(ack.chara_uuid.uuid, ack_uuid, sizeof(ack_uuid));
+    ack.chara_uuid.uuid_len = 16u;
+    desk_uuid128_le(ack_uuid, ack.chara_uuid.uuid);
     ack.properties = GATT_CHARACTER_PROPERTY_BIT_NOTIFY;
     ack.permissions = GATT_ATTRIBUTE_PERMISSION_READ;
     ack.value_len = sizeof(init_value);
@@ -459,6 +453,23 @@ int desk_radio_flush_acks(void)
 bool desk_sle_owns_handle(uint16_t handle)
 {
     return g_sle_registered && handle != 0u && handle == g_sle_cmd_handle;
+}
+
+/*
+ * BLE stores a 128-bit UUID little-endian, so the bytes on the wire are the
+ * reverse of the human-readable string. The Desk header macros are written in
+ * string order; reverse them here.
+ *
+ * This is not cosmetic. Publishing the string order produces a different UUID,
+ * and the Harmony client then fails to find the characteristic even though the
+ * service is listed: the desk command writes are silently dropped.
+ *
+ * SLE is the opposite (SDK sample sle_speed_server.c stores string order), so
+ * this helper is deliberately BLE-only.
+ */
+void desk_uuid128_le(const uint8_t src[16], uint8_t out[16])
+{
+    for (size_t i = 0; i < 16u; i++) out[i] = src[15u - i];
 }
 
 bool desk_sle_on_write(uint16_t conn_id, uint16_t handle, const uint8_t *value,

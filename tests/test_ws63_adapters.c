@@ -127,6 +127,27 @@ int main(void)
     assert(desk_sle_on_write(1u, 0x0041u, (const uint8_t *)"x", 1u));
     assert(!desk_sle_on_write(1u, 0x0042u, (const uint8_t *)"x", 1u));
 
+    /* BLE 128-bit UUID byte order. The stack stores little-endian, so the
+     * array must be the reverse of the string order the header macros use.
+     * Getting this wrong publishes a different UUID and the Harmony client
+     * cannot find the characteristic at all. */
+    {
+        static const uint8_t svc[16] = DESK_BLE_SERVICE_UUID;
+        uint8_t le[16];
+        desk_uuid128_le(svc, le);
+        /* 79b468bd-306c-58a8-9415-c9e9c993bdfa reversed is
+         * fa bd 93 c9 e9 c9 15 94 a8 58 6c 30 bd 68 b4 79 */
+        static const uint8_t expect[16] = {
+            0xfa, 0xbd, 0x93, 0xc9, 0xe9, 0xc9, 0x15, 0x94,
+            0xa8, 0x58, 0x6c, 0x30, 0xbd, 0x68, 0xb4, 0x79
+        };
+        assert(memcmp(le, expect, sizeof(expect)) == 0);
+        /* Round-trips back to string order. */
+        uint8_t back[16];
+        desk_uuid128_le(le, back);
+        assert(memcmp(back, svc, sizeof(svc)) == 0);
+    }
+
     printf("desk_ws63_adapters_tests: OK\n");
     return 0;
 }

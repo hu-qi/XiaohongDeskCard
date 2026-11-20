@@ -39,6 +39,13 @@
 #define DESK_SLE_COMMAND_UUID DESK_BLE_COMMAND_UUID
 #define DESK_SLE_ACK_UUID     DESK_BLE_ACK_UUID
 
+/*
+ * Convert a 128-bit UUID from string order (the order the macros above and the
+ * Harmony client use) to the little-endian byte order the BLE stack expects.
+ * Exposed so the host tests can pin the byte order; SLE does NOT use this.
+ */
+void desk_uuid128_le(const uint8_t src[16], uint8_t out[16]);
+
 /* Return true when the written handle belongs to the desk command char. */
 bool desk_ble_owns_handle(uint16_t handle);
 
