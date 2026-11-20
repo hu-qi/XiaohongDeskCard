@@ -22,7 +22,7 @@
 
 ## Gate B：SDK 编译验证（无需设备）— 未开始
 
-- [ ] 固定并记录小鸿 WS63 原仓库及 SDK 的实际 commit、构建说明和工具链
+- [ ] 固定并记录小鸿 WS63 原仓库及 SDK 的实际 commit、构建说明和工具链（OpenHarmony commit 由 `tools/ws63_preflight.py --oh-commit` 写入报告）
 - [ ] 编译原始官方样例，保存成功日志与产物校验和
 - [ ] 将 `desk_core`、`desk_wire`、`desk_packet`、`desk_dispatcher`、双槽 NV 和 LVGL/WS63 CMSIS 适配层真正植入上游 SDK GN 构建；双槽 NV 的 C99 逻辑已完成，但真实 Flash HAL 仍待绑定
 - [ ] 编译 BLE GATT Peripheral/Server 与 SLE SSAP Server，并加入相同 UUID

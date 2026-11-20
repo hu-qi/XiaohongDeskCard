@@ -26,10 +26,11 @@ hb build -f
 离线源文件预检查（无需真机）：
 
 ```bash
-python3 tools/ws63_preflight.py --root /path/to/openharmony --json
+python3 tools/ws63_preflight.py --root /path/to/openharmony \
+  --oh-commit <OpenHarmony 7.0.0.38-Release 实际 commit SHA> --json
 ```
 
-该脚本只检查源码路径/锚点和 vendor commit；不会下载 SDK、编译、修改文件或操作硬件。上游版本变化可能导致路径失效，应人工审核后修复，**不要强制打补丁**。
+`--oh-commit` 把实际源码 commit 固定写入报告（`openHarmonyCommit`），让后续 `hb build -f` 日志可追溯到同一源码树；非法 SHA 会被直接拒绝。该脚本只检查源码路径/锚点和 commit；不会下载 SDK、编译、修改文件或操作硬件。上游版本变化可能导致路径失效，应人工审核后修复，**不要强制打补丁**。
 
 ## 二、最小植入边界
 
@@ -150,8 +151,9 @@ node --experimental-strip-types --test tests/router.test.mjs
 # 当前 XiaohongDeskCard 源码仓库的根目录执行
 python3 tools/ws63_overlay.py --output build/ws63-overlay
 
-# 有上游 OpenHarmony 源码树时，先核查布局（不触碰板卡）
-python3 tools/ws63_preflight.py --root /path/to/openharmony --json
+# 有上游 OpenHarmony 源码树时，先核查布局并固定源码 commit（不触碰板卡）
+python3 tools/ws63_preflight.py --root /path/to/openharmony \
+  --oh-commit <OpenHarmony 7.0.0.38-Release commit SHA> --json
 ```
 
 暂存结果包含 `src/deskcard/` 下 8 个 C 文件、`src/deskcard/include/` 下 8 个头文件、`BUILD.gn.fragment` 与 `manifest.json`（逐文件 SHA-256）。它会拒绝覆盖既有暂存目录，且**从不自动修改上游 `BUILD.gn`**。

@@ -3,13 +3,16 @@
 
 This does NOT build firmware, edit upstream files, download SDKs or touch a
 device. Checks that expected upstream source anchor files exist and prints
-evidence for manually reviewing the proposed integration.
+evidence for manually reviewing the proposed integration. Pass ``--oh-commit``
+to pin the OpenHarmony 7.0.0.38-Release commit the report was produced against,
+so a later build log can be traced back to an exact source tree.
 """
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -33,9 +36,20 @@ ANCHORS = {
     "vendor_build": ("static_library",),
     "wifi_task": ("wifi",),
 }
+COMMIT_PATTERN = re.compile(r"[0-9a-f]{7,40}")
 
 
-def inspect(root: Path) -> dict:
+def normalize_commit(value: str) -> str:
+    """Return a lowercase abbreviated/full git SHA, or raise ValueError."""
+    candidate = (value or "").strip().lower()
+    if not COMMIT_PATTERN.fullmatch(candidate):
+        raise ValueError(
+            f"invalid git commit {value!r}: expected 7-40 hexadecimal characters"
+        )
+    return candidate
+
+
+def inspect(root: Path, oh_commit: str | None = None) -> dict:
     root = root.expanduser().resolve()
     files: dict[str, dict] = {}
     missing: list[str] = []
@@ -71,6 +85,8 @@ def inspect(root: Path) -> dict:
         "tree": str(root),
         "allRequiredPresent": not missing,
         "missingRequired": missing,
+        "openHarmonyCommit": oh_commit,
+        "openHarmonyCommitPinned": oh_commit is not None,
         "upstreamVendorCommit": commit,
         "checks": files,
         "sdkCompiled": False,
@@ -79,13 +95,24 @@ def inspect(root: Path) -> dict:
     }
 
 
-def main() -> int:
+def _commit_argument(value: str) -> str:
+    try:
+        return normalize_commit(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True,
                         help="Root of a checked-out Xiaohong OpenHarmony source tree")
     parser.add_argument("--json", action="store_true", help="Machine-readable report")
-    args = parser.parse_args()
-    result = inspect(args.root)
+    parser.add_argument(
+        "--oh-commit", type=_commit_argument, default=None,
+        help="Pinned OpenHarmony source commit (7-40 hex chars) to record in the report",
+    )
+    args = parser.parse_args(argv)
+    result = inspect(args.root, oh_commit=args.oh_commit)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
@@ -96,6 +123,9 @@ def main() -> int:
             if "anchors" in info:
                 for token, exists in info["anchors"].items():
                     print(f"    {'+' if exists else '-'} {token}")
+        print(
+            "OpenHarmony commit (pinned):",
+            result["openHarmonyCommit"] or "(not pinned)")
         print("Upstream vendor commit:", result["upstreamVendorCommit"] or "(not found)")
         print("Firmware compile: NOT RUN; hardware: NOT USED")
     return 0 if result["allRequiredPresent"] else 2

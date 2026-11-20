@@ -132,7 +132,7 @@ curl -X PUT http://127.0.0.1:8765/api/v1/desk/content \
 - `firmware/core/desk_dispatcher`：BLE/SLE/Wi-Fi 公用有界 FIFO；只有 LVGL owner task 执行 Core / 渲染 / ACK
 - `firmware/display/desk_view_lvgl`：原装 240×240 TFT 的 LVGL v8 桌牌界面，姓名/职位/组织/主题
 - `firmware/platform/ws63/desk_ws63_glue`：SDK 无关的 LVGL、NV 存储、UI 事件、ACK 任务回调适配接口
-- `tools/ws63_preflight.py`：检查 OpenHarmony 7 上游源码目录/关键文件并打印 vendor commit，不编译或烧录
+- `tools/ws63_preflight.py`：检查 OpenHarmony 7 上游源码目录/关键文件，支持 `--oh-commit` 固定源码 commit 并打印 vendor commit，不编译或烧录
 - 主机 LVGL/NV 测试替身及测试文件：不依赖开发板，也不伪称实际屏幕已显示
 
 完整集成步骤见 [WS63 适配指南](docs/WS63_INTEGRATION.md)。当前 GitHub Actions 运行 C99、模拟器、HarmonyOS 结构及 Node 22 路由策略测试。这些宿主机测试通过不代表 `hb build` 或 DevEco HAP 编译成功；硬件仅在 [Issue #8](https://github.com/hu-qi/XiaohongDeskCard/issues/8) 开始时需要用户参与。
