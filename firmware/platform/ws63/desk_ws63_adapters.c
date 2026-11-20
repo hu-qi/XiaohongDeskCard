@@ -186,11 +186,29 @@ static volatile bool g_ble_disabled;
 static uint32_t g_ble_adv_restart_ms;
 #define DESK_BLE_ADV_RESTART_INTERVAL_MS 5000u /* 5 s */
 
+/* Truth about whether advertising is running. gap_ble_start_adv() returning 0
+ * does not mean the stack keeps advertising, and blindly stopping a healthy
+ * announce to "restart" it can leave the handle in a state where the next
+ * start fails outright. Only the stack's own callbacks are authoritative. */
+static volatile bool g_ble_adv_active;
+
 static void desk_ble_set_local_name(void)
 {
     static const char name[] = "XiaohongDesk";
     (void)gap_ble_set_local_name((const uint8_t *)name,
                                  (uint8_t)(sizeof(name) - 1u));
+}
+
+static void desk_ble_adv_started_cbk(uint8_t adv_id, adv_status_t status)
+{
+    g_ble_adv_active = (status == ADV_STATUS_ADVERTISING);
+    osal_printk("[desk ble] adv start id %u status %d\r\n", adv_id, (int)status);
+}
+
+static void desk_ble_adv_stopped_cbk(uint8_t adv_id, adv_status_t status)
+{
+    g_ble_adv_active = false;
+    osal_printk("[desk ble] adv stop id %u status %d\r\n", adv_id, (int)status);
 }
 
 static void desk_ble_start_adv(void)
@@ -225,7 +243,10 @@ static void desk_ble_start_adv(void)
     param.channel_map = 0x07;
     param.duration = 0; /* advertise until stopped */
     (void)gap_ble_set_adv_param(DESK_BLE_ADV_HANDLE, &param);
-    (void)gap_ble_start_adv(DESK_BLE_ADV_HANDLE);
+    /* Optimistic: the start callback corrects this if the stack refuses. It
+     * keeps the keepalive from firing a second start before the callback
+     * arrives, which the stack would reject as a state error. */
+    g_ble_adv_active = (gap_ble_start_adv(DESK_BLE_ADV_HANDLE) == ERRCODE_BT_SUCCESS);
 }
 
 static void desk_ble_gap_enable_cbk(errcode_t status)
@@ -301,6 +322,8 @@ static bool desk_ble_register_callbacks(void)
     gap_cb.ble_enable_cb = desk_ble_gap_enable_cbk;
     gap_cb.ble_disable_cb = desk_ble_gap_disable_cbk;
     gap_cb.conn_state_change_cb = desk_ble_gap_conn_state_cbk;
+    gap_cb.start_adv_cb = desk_ble_adv_started_cbk;
+    gap_cb.stop_adv_cb = desk_ble_adv_stopped_cbk;
     if (gap_ble_register_callbacks(&gap_cb) != ERRCODE_BT_SUCCESS) {
         osal_printk("[desk ble] gap callback registration failed\r\n");
         return false;
@@ -387,10 +410,11 @@ void desk_ble_poll(void)
         return;
     }
 
-    /* BLE advertising keepalive: the WS63 stack may stop advertising after a
-     * short period. Periodically restart advertising to keep the device
-     * discoverable, similar to the SLE announce keepalive. */
-    if (!g_connected) {
+    /* BLE advertising keepalive: restart advertising only when the stack has
+     * reported that it stopped. Unconditionally stopping a healthy advertise
+     * every few seconds risks leaving the handle in a state where the next
+     * start fails, which makes the device permanently invisible. */
+    if (!g_connected && !g_ble_adv_active) {
         uint32_t freq = osKernelGetTickFreq();
         if (freq == 0u) freq = 1u;
         const uint32_t now = (uint32_t)(((uint64_t)osKernelGetTickCount() * 1000u) / freq);
@@ -400,7 +424,6 @@ void desk_ble_poll(void)
             g_ble_adv_restart_ms = now;
         } else if ((now - g_ble_adv_restart_ms) >= DESK_BLE_ADV_RESTART_INTERVAL_MS) {
             g_ble_adv_restart_ms = now;
-            (void)gap_ble_stop_adv(DESK_BLE_ADV_HANDLE);
             desk_ble_start_adv();
         }
     }
@@ -831,35 +854,54 @@ static void sle_connect_state_changed_cbk(uint16_t conn_id,
 
 /* ---- SLE announce keepalive ---- */
 
-/* The WS63 SLE stack stops announcing after a short period (observed: a few
- * seconds). The SDK does not expose a "continuous announce" mode, so the UI
- * task poll restarts announce periodically to keep the device discoverable.
+/* The WS63 SLE stack can drop an announce after a short period. This poll
+ * restarts it, but ONLY when the stack has reported that it is no longer
+ * announcing. An unconditional stop+start is actively harmful: measured on a
+ * real device, sle_start_announce() then fails with ERRCODE_SLE_STATUS_ERR
+ * (0x8000600a) every time, so the device ended up permanently un-discoverable
+ * a few seconds after boot -- worse than no keepalive at all.
  *
- * Key findings from real-device testing:
- *  - sle_start_announce() alone cannot restart a stopped announce; it must be
- *    preceded by sle_stop_announce() to reset the internal state machine.
- *  - The announce terminal/disable callbacks fire reliably, so g_sle_announce_active
- *    tracks the real state.
- *  - A 5 s restart interval is short enough to keep the device visible with
- *    only a brief gap, and long enough not to stress the stack.
+ * Rules, from the SDK's own sample (sle_speed_server.c:322) and real-device
+ * traces:
+ *  - sle_start_announce() is called on its own; it is never preceded by
+ *    sle_stop_announce() on a handle the stack already stopped.
+ *  - A failed start is not retried in a tight loop. Repeated failures mean the
+ *    stack is not ready; back off instead of hammering it.
+ *  - The enable/disable/terminal callbacks are the only truth about whether an
+ *    announce is running, so g_sle_announce_active gates every restart.
  */
 
 static uint32_t g_sle_announce_restart_ms;
-#define DESK_SLE_ANNOUNCE_RESTART_INTERVAL_MS 5000u /* 5 s */
-#define DESK_SLE_ANNOUNCE_RETRY_MS 500u             /* 0.5 s after stack-reported stop */
+static uint32_t g_sle_announce_backoff_ms;
+#define DESK_SLE_ANNOUNCE_RETRY_MS 2000u      /* first retry after a reported stop */
+#define DESK_SLE_ANNOUNCE_BACKOFF_MAX_MS 30000u /* cap the exponential backoff */
 
 void desk_sle_announce_keepalive(uint32_t now_ms)
 {
     if (!g_sle_registered || g_sle_connected) return;
-    const uint32_t min_gap = g_sle_announce_active
-                                 ? DESK_SLE_ANNOUNCE_RESTART_INTERVAL_MS
-                                 : DESK_SLE_ANNOUNCE_RETRY_MS;
-    if ((now_ms - g_sle_announce_restart_ms) < min_gap) return;
+    /* Announcing is already running: nothing to do. Restarting a healthy
+     * announce is what broke discovery before. */
+    if (g_sle_announce_active) return;
+
+    const uint32_t gap = g_sle_announce_backoff_ms != 0u
+                             ? g_sle_announce_backoff_ms
+                             : DESK_SLE_ANNOUNCE_RETRY_MS;
+    if ((now_ms - g_sle_announce_restart_ms) < gap) return;
     g_sle_announce_restart_ms = now_ms;
-    /* Stop first: the stack rejects sle_start_announce() if the handle is
-     * still in a non-stopped state, even after a terminal callback. */
-    (void)sle_stop_announce(DESK_SLE_ADV_HANDLE);
+
     desk_sle_announce_start();
+    if (g_sle_announce_active) {
+        g_sle_announce_backoff_ms = 0u; /* recovered */
+        return;
+    }
+    /* Start failed: double the wait, capped. The stack is not ready yet. */
+    g_sle_announce_backoff_ms = g_sle_announce_backoff_ms == 0u
+                                    ? DESK_SLE_ANNOUNCE_RETRY_MS * 2u
+                                    : g_sle_announce_backoff_ms * 2u;
+    if (g_sle_announce_backoff_ms > DESK_SLE_ANNOUNCE_BACKOFF_MAX_MS)
+        g_sle_announce_backoff_ms = DESK_SLE_ANNOUNCE_BACKOFF_MAX_MS;
+    osal_printk("[desk sle] announce restart failed, backoff %u ms\r\n",
+                (unsigned)g_sle_announce_backoff_ms);
 }
 
 static void sle_write_request_cbk(uint8_t server_id, uint16_t conn_id,
