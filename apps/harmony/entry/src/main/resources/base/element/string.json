@@ -1,0 +1,9 @@
+{
+  "string": [
+    { "name": "app_name", "value": "小鸿智能桌牌" },
+    { "name": "module_desc", "value": "小鸿 AI 智能桌牌三模通信控制" },
+    { "name": "EntryAbility_desc", "value": "小鸿电子桌牌编辑与控制" },
+    { "name": "bluetooth_permission", "value": "允许扫描和连接近场 BLE 智能桌牌" },
+    { "name": "nearlink_permission", "value": "允许搜索和连接星闪智能桌牌" }
+  ]
+}

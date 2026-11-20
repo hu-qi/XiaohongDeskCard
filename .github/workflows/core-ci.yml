@@ -1,0 +1,111 @@
+name: Desk Software Baseline (host)
+on:
+  push:
+    paths: ["firmware/core/**", "firmware/display/**", "firmware/platform/ws63/**", "tools/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+  pull_request:
+    paths: ["firmware/core/**", "firmware/display/**", "firmware/platform/ws63/**", "tools/**", "apps/harmony/**", "tests/**", "CMakeLists.txt", ".github/workflows/core-ci.yml"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reject committed DevEco signing credentials
+        run: python3 tools/check_signing_safety.py --tracked
+      - name: Router policy (Node 22 native TS stripping)
+        run: node --experimental-strip-types --test tests/router.test.mjs
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Compile
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Configure C UndefinedBehaviorSanitizer
+        run: >
+          cmake -S . -B build-ubsan -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined"
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=undefined"
+      - name: Build and run sanitized C tests
+        run: |
+          cmake --build build-ubsan --parallel
+          ctest --test-dir build-ubsan --output-on-failure -R desk_ -E desk_sim_http_tests
+      - name: Stage WS63 review-only source overlay
+        run: python3 tools/ws63_overlay.py --output build/ws63-overlay
+      - name: Publish WS63 source staging (NOT FLASHABLE)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ws63-deskcard-source-staging
+          path: build/ws63-overlay/
+          if-no-files-found: error
+          retention-days: 14
+
+  lvgl-real-api:
+    name: Real LVGL ${{ matrix.version }} host compile
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: '8.3.11'
+            commit: 74d0a816a440eea53e030c4f1af842a94f7ce3d3
+          - version: '9.3.0'
+            commit: c033a98afddd65aaafeebea625382a94020fe4a7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned real LVGL source
+        uses: actions/checkout@v4
+        with:
+          repository: lvgl/lvgl
+          ref: ${{ matrix.commit }}
+          path: external/lvgl
+          persist-credentials: false
+      - name: Fetch pinned official CMSIS headers for combined stack
+        uses: actions/checkout@v4
+        with:
+          repository: ARM-software/CMSIS_6
+          ref: 6f0a58d01aa9bd2feba212097f9afe7acd991d52
+          path: external/cmsis
+          persist-credentials: false
+          sparse-checkout: |
+            CMSIS/RTOS2/Include
+            CMSIS/Core/Include
+      - name: Configure combined real LVGL and CMSIS API stack
+        run: |
+          cmake -S tests/lvgl_real -B build-real-lvgl \
+            -DDESK_LVGL_SOURCE_DIR="${GITHUB_WORKSPACE}/external/lvgl" \
+            -DDESK_CMSIS_HEADER_DIR="${GITHUB_WORKSPACE}/external/cmsis/CMSIS/RTOS2/Include" \
+            -DDESK_CMSIS_CORE_HEADER_DIR="${GITHUB_WORKSPACE}/external/cmsis/CMSIS/Core/Include" \
+            -DCMAKE_BUILD_TYPE=Debug
+      - name: Compile original-screen Desk View and complete 12-C firmware core
+        run: cmake --build build-real-lvgl --target test_lvgl_real test_ws63_real_stack --parallel 4
+      - name: Execute real LVGL headless integration test
+        run: ctest --test-dir build-real-lvgl --output-on-failure
+
+  cmsis-official-api:
+    name: Official CMSIS-RTOS2 v2.3.0 header compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned official ARM CMSIS_6 v6.2.0 headers
+        uses: actions/checkout@v4
+        with:
+          repository: ARM-software/CMSIS_6
+          ref: 6f0a58d01aa9bd2feba212097f9afe7acd991d52
+          path: external/cmsis
+          persist-credentials: false
+          sparse-checkout: |
+            CMSIS/RTOS2/Include
+            CMSIS/Core/Include
+      - name: Compile WS63 display bridge with actual CMSIS API declarations
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Wpedantic \
+            -Iexternal/cmsis/CMSIS/RTOS2/Include \
+            -Iexternal/cmsis/CMSIS/Core/Include \
+            -Ifirmware/platform/ws63 -Ifirmware/core/include \
+            -Ifirmware/display -Itests/lvgl_stub \
+            -c firmware/platform/ws63/desk_ws63_cmsis.c \
+            -o /tmp/desk_ws63_cmsis_official.o
+          echo 'PASS: CMSIS-RTOS2 signatures compile (NOT a WS63 SDK build)'
