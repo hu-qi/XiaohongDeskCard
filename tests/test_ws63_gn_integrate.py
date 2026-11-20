@@ -47,7 +47,7 @@ def git(where: Path, *args: str) -> str:
 class GNIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name) / "ohos"
+        self.root = Path(self.temp.name).resolve() / "ohos"
         self.vendor = self.root / "vendor/atomgit/xiaohong"
         self.vendor.mkdir(parents=True)
         git(self.vendor, "init", "-q")

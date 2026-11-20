@@ -1,6 +1,6 @@
 # Gate B · 华为云 ECS 真实构建记录
 
-状态:**进行中** — ECS 系统已重装恢复,依赖已重放,repo sync 中(2026-11-20)。
+状态:**已完成** — ECS 上基线固件与 XiaohongDeskCard 固件全量构建成功,产物 .fwpkg 已成功 scp 同步回本地(2026-11-20)。
 
 ## 资源与工具版本
 
@@ -32,6 +32,11 @@
 6. apt 首轮被 SSH 断连打断 → `dpkg --configure -a` 修复后重跑成功。
 7. repo launcher 需 `export REPO_URL=https://mirrors.tuna.tsinghua.edu.cn/git/git-repo`。
 
+8. **GN 构建依赖与 SLE 头文件**:
+   - `deskcard` 的 `desk_ws63_adapters.c` 依赖 SLE 服务头文件,`vendor/atomgit/xiaohong/xiaohong/BUILD.gn` 中需加入 `${ws63_sdk_path}/include/middleware/services/bts/sle`。
+   - `device/soc/hisilicon/ws63v100/sdkv106/BUILD.gn` 中的 `run_sdk_build` 原生依赖列表中缺少 `"//vendor/atomgit/xiaohong:xiaohong"`。ninja 并行构建时若先触发 `hm_build.sh`,由于 `libxiaohong.a` 尚未打包会导致链接报错 `undefined reference`。在 `run_sdk_build` 的 `deps` 中加入 `"//vendor/atomgit/xiaohong:xiaohong"` 显式依赖后完全解决。
+   - SDK 依赖的 Python 构建脚本缺少 `kconfiglib` 与 `pycparser`,需 `pip3 install --target /root/xiaohong/device/soc/hisilicon/ws63v100/sdkv106/build/script/ kconfiglib pycparser`。
+
 ### 2026-11-20 SSH 全断事件(重装操作系统)与真实根因
 
 时间线:构建中断后 SSH 在 banner 阶段(`kex_exchange_identification: Connection closed by remote host`)被断。SOFT/HARD 重启、API 密码重置全部无效 → 误判为系统盘 sshd 损坏 → HARD 关机后 `ReinstallServerWithCloudInit`(job `ff808081a0ed145901a1f66018b53e9a`,39 秒即 SUCCESS)。
@@ -54,14 +59,27 @@
 - [x] ECS 创建(t7.xlarge.4 + Ubuntu 22.04 + 密钥对)
 - [x] DNS 配置
 - [x] apt 依赖 + repo + ohos-build + git lfs(重装后 2026-11-20 重放完成;注:`libc6-dev-amd64` 在 amd64 宿主不存在,跳过不影响构建)
-- [ ] repo sync 源码(~11 GB)
-- [ ] `git lfs pull` 全仓 LFS
-- [ ] prebuilts_download.sh(~11 GB)
-- [ ] clang 软链 llvm
-- [ ] RISC-V 工具链 PATH 校验
-- [ ] `./build.sh --product-name xiaohong --gn-args is_debug=false`
-- [ ] 产物 `ws63-liteos-app_all.fwpkg` / `_load_only.fwpkg` scp 回本地
-- [ ] XiaohongDeskCard deskcard overlay 集成构建(基线固件成功后)
+- [x] repo sync 源码(~11 GB)
+- [x] `git lfs pull` 全仓 LFS
+- [x] prebuilts_download.sh(~11 GB)
+- [x] clang 软链 llvm
+- [x] RISC-V 工具链 PATH 校验
+- [x] `./build.sh --product-name xiaohong --gn-args is_debug=false`(成功,用时 1m35s)
+- [x] XiaohongDeskCard deskcard overlay 集成构建(成功集成进 libxiaohong.a 并链接产出固件)
+- [x] 产物 `ws63-liteos-app_all.fwpkg` / `_load_only.fwpkg` scp 回本地
+
+## 本地产物清单
+
+固件产物存放于本地 `xiaohong-firmware/`:
+- `ws63-liteos-app_all.fwpkg` (2,115,432 B)
+  - SHA-256: `16f90c6d208691bfe1cde4930eea859978052940da4592ac76b2e0b7df2e123b`
+  - 公开下载: <https://huqi-blog.obs.cn-north-4.myhuaweicloud.com/xiaohong-deskcard/ws63-liteos-app_all_9.9.0_16f90c6d.fwpkg>
+- `ws63-liteos-app_load_only.fwpkg` (1,984,340 B)
+  - SHA-256: `202dea365deea9686945354c60c014efb80b69c94c7ff418be333c19bb9dd60a`
+
+构建日志: <https://huqi-blog.obs.cn-north-4.myhuaweicloud.com/xiaohong-deskcard/build.log>
+
+> 该版本修复了 BLE 在"设备已有 Wi-Fi 配置"时完全不存在的问题:`enable_ble()` 此前只有配网任务一条调用路径,而已配网设备根本不会启动配网任务。现在由 UI 任务轮询自行使能并广播 `XiaohongDesk`,同时补上了连接状态回调(此前 `desk_ble_on_connect()` 从未被调用,导致 ACK 永远发不出去)。
 
 ## 后续(XiaohongDeskCard Gate B 对接)
 

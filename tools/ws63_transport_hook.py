@@ -10,8 +10,13 @@ idempotent:
     + forward GATT writes on handles the provisioning service does not own
       into desk_ble_on_write(), so both services share the vendor's single
       global gatts callback
-    + register the Desk Card GATT service once BLE is enabled
-    + register the Desk Card GATT service (ACKs are pumped by the UI task)
+    + release the desk BLE link before the vendor enables the stack, because
+      BLE can only be enabled once
+
+The Desk Card enables BLE itself from the UI task (desk_ble_poll), not from
+this file: main.c only starts BleProvTask when the device has no Wi-Fi config,
+so hooking the desk service onto the provisioning path would leave it missing
+on every normally provisioned device.
 
 SLE and the station-mode HTTP listener are started from desk_board_init(), so
 they do not depend on the provisioning task ever running.
@@ -47,11 +52,11 @@ BLE_WRITE_ANCHOR = (
     "        ble_prov_on_rx_frame(write_cb_para->value, write_cb_para->length);\n"
     "    }\n"
 )
-# Called after the provisioning service is built, inside the BLE enable cbk.
+# The vendor's enable path. The desk link must give the stack back *before*
+# enable_ble(), not after it, so the anchor is the callback registration line
+# that precedes it.
 BLE_SERVICE_ANCHOR = (
-    "    if (ble_prov_add_service() == ERRCODE_BT_SUCCESS) {\n"
-    "        (void)ble_prov_start_adv();\n"
-    "    }\n"
+    "    gap_cb.conn_state_change_cb = ble_prov_conn_state_cbk;\n"
 )
 
 def _ble_include_block() -> str:
@@ -78,10 +83,12 @@ def _ble_write_block() -> str:
 def _ble_service_block() -> str:
     return (
         f"\n    {BEGIN}\n"
-        "    /* Desk Card service rides on the same BLE stack the vendor just\n"
-        "     * enabled. Its ACKs are pumped from the UI task, not this one, so\n"
-        "     * the desk link keeps working after provisioning exits. */\n"
-        "    (void)desk_ble_register_service();\n"
+        "    /* The stack can only be enabled once. The desk link normally leaves\n"
+        "     * it alone while the device is provisioning, but on the failover\n"
+        "     * path it may still hold it from a previous Wi-Fi session, in which\n"
+        "     * case the enable call below would fail and provisioning would\n"
+        "     * never come up. Hand it back first. */\n"
+        "    desk_ble_release();\n"
         f"    {END}\n"
     )
 
@@ -105,7 +112,7 @@ def _hook_ble(text: str) -> str:
     patched = _insert_after(patched, BLE_WRITE_ANCHOR, _ble_write_block(),
                             "BLE write forwarding")
     patched = _insert_after(patched, BLE_SERVICE_ANCHOR, _ble_service_block(),
-                            "BLE service registration")
+                            "BLE stack release")
     return patched
 
 

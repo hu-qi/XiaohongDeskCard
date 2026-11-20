@@ -217,15 +217,15 @@ int desk_board_init(void)
     g_board.ready = true;
 
 #if !defined(DESK_BOARD_HOST_TEST)
-    /* Both of these are independent of the vendor's BLE provisioning task,
-     * which only runs when the device has no Wi-Fi config. Starting them from
-     * the UI task means a normal, already-provisioned device still gets SLE
-     * and the HTTP API.
+    /* All three transports are started from the UI task, not from the vendor's
+     * BLE provisioning task. That task only runs on a device with no Wi-Fi
+     * config, so anything started from it is missing on a normally provisioned
+     * device.
      *
-     * The BLE GATT service is NOT registered here: gatts_register_server()
-     * requires enable_ble() to have completed, so it is registered from the
-     * vendor's own BLE-enable callback (see tools/ws63_transport_hook.py).
-     * The HTTP listener waits for the station to get an IP by itself. */
+     * BLE is started from the poll rather than here, because the vendor may
+     * still be bringing Wi-Fi up; desk_ble_poll() waits for the station to be
+     * connected and is idempotent. The HTTP listener waits for the station to
+     * get an IP by itself. */
     desk_sle_start();
     (void)desk_http_task_start();
 #endif
@@ -242,6 +242,10 @@ void desk_board_poll(void)
     if (!g_board.ready) return;
     (void)desk_ws63_port_ui_drain(&g_board.port);
 #if !defined(DESK_BOARD_HOST_TEST)
+    /* Bring BLE up once the device is on Wi-Fi, and hand it back if the device
+     * falls into provisioning. Cheap and idempotent. */
+    desk_ble_poll();
+
     /* The ACKs Desk Core just produced must go out on whichever link asked.
      * The vendor only runs its BLE provisioning task while there is no Wi-Fi
      * config, so the UI task is the one place that always runs: pump from

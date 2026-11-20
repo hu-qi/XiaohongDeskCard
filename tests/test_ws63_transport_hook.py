@@ -32,6 +32,26 @@ BLE_SAMPLE = (
     "    }\n"
     "}\n"
     "\n"
+    "static errcode_t ble_prov_ble_init(void)\n"
+    "{\n"
+    "    gap_ble_callbacks_t gap_cb = {0};\n"
+    "    gatts_callbacks_t gatts_cb = {0};\n"
+    "\n"
+    "    gap_cb.ble_enable_cb = ble_prov_ble_enable_cbk;\n"
+    "    gap_cb.conn_state_change_cb = ble_prov_conn_state_cbk;\n"
+    "    if (gap_ble_register_callbacks(&gap_cb) != ERRCODE_BT_SUCCESS) {\n"
+    "        return ERRCODE_BT_FAIL;\n"
+    "    }\n"
+    "\n"
+    "    gatts_cb.write_request_cb = ble_prov_write_req_cbk;\n"
+    "    if (gatts_register_callbacks(&gatts_cb) != ERRCODE_BT_SUCCESS) {\n"
+    "        return ERRCODE_BT_FAIL;\n"
+    "    }\n"
+    "\n"
+    "    errcode_t ret = enable_ble();\n"
+    "    return ret;\n"
+    "}\n"
+    "\n"
     "static void BleProvTask(void)\n"
     "{\n"
     "    while (1) {\n"
@@ -49,7 +69,7 @@ class BleHookTests(unittest.TestCase):
         self.assertEqual(patched.count(END), 3)
         self.assertIn('#include "desk_ws63_adapters.h"', patched)
         self.assertIn("desk_ble_on_write(", patched)
-        self.assertIn("desk_ble_register_service()", patched)
+        self.assertIn("desk_ble_release();", patched)
 
     def test_vendor_write_path_is_preserved(self):
         patched = _hook_ble(BLE_SAMPLE)
@@ -62,10 +82,13 @@ class BleHookTests(unittest.TestCase):
         self.assertLess(patched.index("ble_prov_on_rx_frame"),
                         patched.index("desk_ble_on_write("))
 
-    def test_service_registration_follows_provisioning_service(self):
+    def test_stack_is_released_before_the_vendor_enables_it(self):
+        # The stack can only be enabled once, so the desk link must give it
+        # back before the vendor's enable call, not after it.
         patched = _hook_ble(BLE_SAMPLE)
-        self.assertLess(patched.index("ble_prov_add_service()"),
-                        patched.index("desk_ble_register_service()"))
+        body = patched[patched.index("static errcode_t ble_prov_ble_init"):]
+        self.assertLess(body.index("desk_ble_release();"),
+                        body.index("= enable_ble();"))
 
     def test_no_radio_work_is_added_to_the_provisioning_loop(self):
         # The provisioning task only runs when the device has no Wi-Fi config.
@@ -73,6 +96,12 @@ class BleHookTests(unittest.TestCase):
         patched = _hook_ble(BLE_SAMPLE)
         loop = patched[patched.index("static void BleProvTask"):]
         self.assertNotIn("desk_", loop)
+
+    def test_desk_service_is_not_registered_from_the_provisioning_path(self):
+        # It would be missing on every normally provisioned device, because
+        # main.c never starts BleProvTask there.
+        patched = _hook_ble(BLE_SAMPLE)
+        self.assertNotIn("desk_ble_register_service", patched)
 
     def test_idempotent(self):
         once = _hook_ble(BLE_SAMPLE)

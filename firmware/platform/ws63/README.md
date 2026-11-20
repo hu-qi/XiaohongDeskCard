@@ -27,10 +27,16 @@ from `lvgl_task.c` create the reference that keeps them.
 
 ## Transport wiring
 
-- **BLE** — `desk_ble_register_service()` builds the Desk Card GATT service on
-  its own server id after `enable_ble()` completes. `gatts_register_callbacks()`
-  is global and the vendor already installed it, so the vendor's write callback
-  forwards handles it does not own to `desk_ble_on_write()`.
+- **BLE** — `desk_ble_poll()`, called from the UI task, enables the stack itself
+  once the station is connected, then builds the Desk Card GATT service on its
+  own server id and advertises as `XiaohongDesk` with the 128-bit service UUID.
+  This cannot live on the vendor provisioning path: `main.c` only starts
+  `BleProvTask` when the device has no Wi-Fi config, so a normally provisioned
+  device would never enable BLE at all. While the device *is* provisioning the
+  vendor owns the stack (and its own advertised name, which the WeChat
+  mini-program matches on); the hook in `net_ble_prov.c` calls
+  `desk_ble_release()` before the vendor's `enable_ble()` because the stack can
+  only be enabled once.
 - **SLE** — the upstream tree had no SLE code at all. `desk_sle_start()` installs
   the announce/connection/SSAP callbacks and enables the stack;
   `desk_sle_register_service()` then builds the SSAP server, service,
@@ -43,9 +49,10 @@ ACKs are pumped from the UI task (`desk_board_poll`), not from a radio worker:
 the vendor only runs its BLE provisioning task when the device has no Wi-Fi
 config, so it is not a reliable pump.
 
-SLE and the HTTP listener start from `desk_board_init()`. The BLE GATT service
-cannot: `gatts_register_server()` requires `enable_ble()` to have completed, so
-it is registered from the vendor's own BLE-enable callback.
+All three transports start from the UI task. The BLE connection-state callback
+that `desk_ble_poll()` installs forwards connect/disconnect into the Desk Core,
+which the vendor's provisioning callback does not do — without it the desk link
+would never open and no ACK could be delivered.
 
 ## Applying the vendor hooks
 
@@ -68,8 +75,8 @@ The GN side additionally needs the SLE include directory, which the vendor
 
 ## Still unverified
 
-- No real-device flash or radio test has been run.
 - BLE/SLE coexistence on this board is assumed from the SDK's own
   `ohos_connect` sample, which enables both, but has not been measured here.
 - The HTTP bearer token is provisioned through `desk_transport_set_http_token()`;
-  the BLE/SLE ownership handshake that should supply it is not implemented yet.
+  the BLE/SLE ownership handshake that should supply it is not implemented yet,
+  so the HTTP API answers 401 until a token is set.

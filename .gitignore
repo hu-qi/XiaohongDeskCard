@@ -31,3 +31,7 @@
 .env
 .env.*
 !.env.example
+
+# Firmware artifacts
+xiaohong-firmware/
+*.fwpkg

@@ -64,6 +64,33 @@ bool desk_ble_flush_ack(void);
  */
 bool desk_ble_register_service(void);
 
+/*
+ * Keep the desk BLE link in step with the vendor's provisioning state.
+ *
+ * The vendor only calls enable_ble() from BleProvTask, and main.c only starts
+ * that task when the device has no Wi-Fi config. On a normally provisioned
+ * device the BLE stack would therefore never be enabled and the Desk Card
+ * service would not exist.
+ *
+ * When the station is connected this registers the GAP/GATTS callbacks, enables
+ * the stack and — from the enable callback — builds the service and advertises
+ * as "XiaohongDesk". When the device drops back into provisioning it tears the
+ * desk service down again, because BLE can only be enabled once and the vendor
+ * needs the stack (and its own advertised name, which the WeChat mini-program
+ * matches on).
+ *
+ * Cheap and idempotent; call it from the UI task poll.
+ */
+void desk_ble_poll(void);
+
+/*
+ * Hand the stack back to the vendor before it enables BLE for provisioning.
+ * The stack can only be enabled once, so a desk link left over from a previous
+ * Wi-Fi session must be torn down first. Called by the vendor hook in
+ * net_ble_prov.c; desk_ble_poll() rebuilds the link afterwards.
+ */
+void desk_ble_release(void);
+
 /* ---- worker pumps ---- */
 
 /*

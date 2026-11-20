@@ -6,11 +6,15 @@
 #include "desk_ws63_board.h"
 
 #if !defined(DESK_ADAPTERS_HOST_TEST)
+#include "bts_def.h"
 #include "bts_gatt_server.h"
 #include "bts_gatt_stru.h"
+#include "bts_le_gap.h"
 #include "errcode.h"
 #include "osal_debug.h"
 #include "osal_task.h"
+#include "settings.h"
+#include "net_wifi_config.h"
 #include "sle_common.h"
 #include "sle_connection_manager.h"
 #include "sle_device_discovery.h"
@@ -136,6 +140,216 @@ bool desk_ble_flush_ack(void)
 
 #if !defined(DESK_ADAPTERS_HOST_TEST)
 /*
+ * The vendor defines this locally because the SDK headers do not export it
+ * (net_ble_prov.c:64). Same value as the SDK samples.
+ */
+#define DESK_BLE_ADV_HANDLE 0x01u
+
+/* Set once enable_ble() has been asked to start, so the UI poll does not call
+ * it again while the stack is still coming up. */
+static bool g_ble_starting;
+/* Set once the desk link owns the BLE stack (service registered + advertising). */
+static bool g_ble_owned;
+/* Set from the stack's disable callback, so release() can wait for it. */
+static volatile bool g_ble_disabled;
+
+static void desk_ble_set_local_name(void)
+{
+    static const char name[] = "XiaohongDesk";
+    (void)gap_ble_set_local_name((const uint8_t *)name,
+                                 (uint8_t)(sizeof(name) - 1u));
+}
+
+static void desk_ble_start_adv(void)
+{
+    static const uint8_t svc_uuid[16] = DESK_BLE_SERVICE_UUID;
+    static const char name[] = "XiaohongDesk";
+
+    /* Flags + complete list of 128-bit service UUIDs (0x07). */
+    uint8_t adv[3 + 2 + 16];
+    adv[0] = 0x02; adv[1] = 0x01; adv[2] = 0x06;
+    adv[3] = 0x11; adv[4] = 0x07;
+    memcpy(&adv[5], svc_uuid, sizeof(svc_uuid));
+
+    uint8_t rsp[2 + sizeof(name) - 1u];
+    rsp[0] = (uint8_t)(1u + sizeof(name) - 1u);
+    rsp[1] = 0x09; /* Complete Local Name */
+    memcpy(&rsp[2], name, sizeof(name) - 1u);
+
+    gap_ble_config_adv_data_t cfg = {0};
+    cfg.adv_data = adv;
+    cfg.adv_length = (uint16_t)sizeof(adv);
+    cfg.scan_rsp_data = rsp;
+    cfg.scan_rsp_length = (uint16_t)sizeof(rsp);
+    (void)gap_ble_set_adv_data(DESK_BLE_ADV_HANDLE, &cfg);
+
+    gap_ble_adv_params_t param = {0};
+    param.min_interval = 0x30; /* 30 ms */
+    param.max_interval = 0x60; /* 60 ms */
+    param.adv_type = GAP_BLE_ADV_CONN_SCAN_UNDIR;
+    param.adv_filter_policy = GAP_BLE_ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+    param.channel_map = 0x07;
+    param.duration = 0; /* advertise until stopped */
+    (void)gap_ble_set_adv_param(DESK_BLE_ADV_HANDLE, &param);
+    (void)gap_ble_start_adv(DESK_BLE_ADV_HANDLE);
+}
+
+static void desk_ble_gap_enable_cbk(errcode_t status)
+{
+    if (status != ERRCODE_BT_SUCCESS) {
+        osal_printk("[desk ble] enable failed 0x%x\r\n", status);
+        g_ble_starting = false;
+        return;
+    }
+    if (!desk_ble_register_service()) {
+        osal_printk("[desk ble] service registration failed\r\n");
+        g_ble_starting = false;
+        return;
+    }
+    desk_ble_set_local_name();
+    desk_ble_start_adv();
+    g_ble_owned = true;
+    g_ble_starting = false;
+    osal_printk("[desk ble] service ready, advertising as XiaohongDesk\r\n");
+}
+
+static void desk_ble_gap_conn_state_cbk(uint16_t conn_id, bd_addr_t *addr,
+                                        gap_ble_conn_state_t conn_state,
+                                        gap_ble_pair_state_t pair_state,
+                                        gap_ble_disc_reason_t disc_reason)
+{
+    (void)addr;
+    (void)pair_state;
+    (void)disc_reason;
+    if (!g_ble_owned) return;
+    if (conn_state == GAP_BLE_STATE_CONNECTED) {
+        desk_ble_on_connect(conn_id);
+    } else {
+        desk_ble_on_disconnect(conn_id);
+    }
+}
+
+static void desk_ble_gatts_write_cbk(uint8_t server_id, uint16_t conn_id,
+                                     gatts_req_write_cb_t *write_cb_para,
+                                     errcode_t status)
+{
+    (void)server_id;
+    (void)conn_id;
+    if (status != ERRCODE_BT_SUCCESS || write_cb_para == NULL) return;
+    /* The desk server is the only one installed on this stack, so every write
+     * that reaches this callback is ours. */
+    (void)desk_ble_on_write(write_cb_para->handle, write_cb_para->value,
+                            write_cb_para->length);
+}
+
+static void desk_ble_gatts_mtu_cbk(uint8_t server_id, uint16_t conn_id,
+                                   uint16_t mtu_size, errcode_t status)
+{
+    (void)server_id;
+    (void)conn_id;
+    (void)status;
+    osal_printk("[desk ble] mtu %u\r\n", mtu_size);
+}
+
+static void desk_ble_gap_disable_cbk(errcode_t status)
+{
+    (void)status;
+    g_ble_disabled = true;
+}
+
+/* Install the GAP/GATTS callbacks. The vendor's provisioning path installs its
+ * own on top when it starts; whichever ran last wins, so this is only called
+ * while the desk link owns the stack. */
+static bool desk_ble_register_callbacks(void)
+{
+    gap_ble_callbacks_t gap_cb = {0};
+    gap_cb.ble_enable_cb = desk_ble_gap_enable_cbk;
+    gap_cb.ble_disable_cb = desk_ble_gap_disable_cbk;
+    gap_cb.conn_state_change_cb = desk_ble_gap_conn_state_cbk;
+    if (gap_ble_register_callbacks(&gap_cb) != ERRCODE_BT_SUCCESS) {
+        osal_printk("[desk ble] gap callback registration failed\r\n");
+        return false;
+    }
+
+    gatts_callbacks_t gatts_cb = {0};
+    gatts_cb.write_request_cb = desk_ble_gatts_write_cbk;
+    gatts_cb.mtu_changed_cb = desk_ble_gatts_mtu_cbk;
+    if (gatts_register_callbacks(&gatts_cb) != ERRCODE_BT_SUCCESS) {
+        osal_printk("[desk ble] gatts callback registration failed\r\n");
+        return false;
+    }
+    return true;
+}
+
+/* A device in provisioning mode must keep the vendor's stack and its own
+ * advertised name: the WeChat mini-program matches on it. */
+static bool desk_ble_provisioning(void)
+{
+    return get_wifi_status() != eWifi_St_Connected;
+}
+
+static void desk_ble_begin(void)
+{
+    if (!desk_ble_register_callbacks()) return;
+
+    g_ble_starting = true;
+    const errcode_t ret = enable_ble();
+    if (ret != ERRCODE_BT_SUCCESS) {
+        osal_printk("[desk ble] enable_ble 0x%x\r\n", ret);
+        g_ble_starting = false;
+        return;
+    }
+    /* The service table and advertising are built from the enable callback;
+     * g_ble_owned turns true there. */
+}
+
+/*
+ * Hand the stack back to the vendor before it starts provisioning. BLE can
+ * only be enabled once, so the desk service has to be torn down first;
+ * desk_ble_poll() rebuilds it if the device leaves provisioning again.
+ */
+void desk_ble_release(void)
+{
+    (void)gap_ble_stop_adv(DESK_BLE_ADV_HANDLE);
+
+    g_ble_disabled = false;
+    const errcode_t ret = disable_ble();
+    if (ret != ERRCODE_BT_SUCCESS) {
+        osal_printk("[desk ble] disable_ble 0x%x\r\n", ret);
+    } else {
+        /* The disable callback runs on the stack thread; do not block forever
+         * on a stack that is being torn down anyway. */
+        for (uint32_t waited = 0u; waited < 1000u && !g_ble_disabled;
+             waited += 5u) {
+            (void)osal_msleep(5u);
+        }
+    }
+
+    /* Forget the handles: the next registration gets fresh ones. */
+    g_server_id = 0u;
+    g_cmd_handle = 0u;
+    g_ack_handle = 0u;
+    g_registered = false;
+    g_connected = false;
+    g_ble_owned = false;
+    g_ble_starting = false;
+}
+
+void desk_ble_poll(void)
+{
+    if (desk_board_transport() == NULL) return;
+    /* Never touch the stack while enable_ble() is still in flight. */
+    if (g_ble_starting) return;
+
+    /* While the device is provisioning the vendor owns the stack. It calls
+     * desk_ble_release() itself from BleProvTask before enabling it, so there
+     * is nothing to do here — and doing it here would block the UI task. */
+    if (desk_ble_provisioning()) return;
+
+    if (!g_ble_owned) desk_ble_begin();
+}
+
+/*
  * Register the Desk Card GATT service next to the vendor provisioning service.
  * A separate server id is used on purpose: gatts_register_callbacks() is global
  * and the vendor already installed it, so this server is served by that same
@@ -219,6 +433,14 @@ bool desk_ble_register_service(void)
 bool desk_ble_register_service(void)
 {
     return false;
+}
+
+void desk_ble_poll(void)
+{
+}
+
+void desk_ble_release(void)
+{
 }
 #endif
 
